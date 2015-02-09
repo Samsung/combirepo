@@ -3,6 +3,8 @@
 import tempfile
 import atexit
 import shutil
+import os
+import logging
 
 
 # FIXME: Rename default names of temporary files and directories when the
@@ -22,8 +24,8 @@ def create_temporary_file(file_suffix):
     """
     file_descriptor, path = tempfile.mkstemp(prefix='tizen-sanitizer.',
                                              suffix="." + file_suffix)
-    file_descriptor.close()  # This helps to avoid the file descriptor leak.
-    atexit.register(shutil.rmtree, path)  # It will be removed at exit.
+    os.close(file_descriptor)  # This helps to avoid the file descriptor leak.
+    atexit.register(os.remove, path)  # It will be removed at exit.
     logging.debug("Created temporary file {0}".format(path))
     return path
 
