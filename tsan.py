@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 import argparse
 import sys
+from dependency_graph_builder import DependencyGraphBuilder
 
 
 def parse_args():
@@ -54,3 +55,5 @@ def parse_args():
 
 if __name__ == '__main__':
     args = parse_args()
+    dependency_builder = DependencyGraphBuilder()
+    repository_graph = dependency_builder.build_graph(args.repository)
