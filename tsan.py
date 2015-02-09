@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 import argparse
 import sys
+import logging
 from dependency_graph_builder import DependencyGraphBuilder
 
 
@@ -46,6 +47,8 @@ def parse_args():
                         help="The name of package that should be excluded from"
                         " the final list of sanitized packages.")
 
+    parser.add_argument("-v", "--verbose", action="store_true", dest="verbose",
+                        default=False, help="Enable verbose mode")
     if len(sys.argv) == 1:
         parser.print_help()
         exit(0)
@@ -55,5 +58,7 @@ def parse_args():
 
 if __name__ == '__main__':
     args = parse_args()
+    if args.verbose:
+        logging.basicConfig(level=logging.DEBUG)
     dependency_builder = DependencyGraphBuilder()
     repository_graph = dependency_builder.build_graph(args.repository)
