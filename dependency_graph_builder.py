@@ -29,6 +29,10 @@ class DependencyGraphBuilder():
 
         @return The dependency graph in the form of hash.
         """
+        # If the relative path is given, transform it to the absolute path,
+        # because it will be written to the config file.
+        repository_path = os.path.abspath(repository_path)
+
         if not os.path.isdir(repository_path):
             raise Exception("Directory {0} does not exist!".format(
                             repository_path))
@@ -86,6 +90,9 @@ class DependencyGraphBuilder():
 
         except yum.Errors.YumBaseError as error:
             logging.error("YUM error happened: {0}".format(error))
+            config_file_content = open(config_path).read()
+            logging.error("The following config file was "
+                          "used:\n{0}".format(config_file_content))
             sys.exit(1)
 
         return yum_base
