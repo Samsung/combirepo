@@ -21,11 +21,12 @@ class DependencyGraphBuilder():
         self.repository_path = None
         logging.debug("Initializing dependency graph builder...")
 
-    def build_graph(self, repository_path):
+    def build_graph(self, repository_path, arch):
         """
         Builds the dependency graph of the given repository.
 
         @param repository_path  The path to the repository
+        @param arch             The architecture to be analyzed
 
         @return The dependency graph in the form of hash.
         """
@@ -37,14 +38,20 @@ class DependencyGraphBuilder():
             raise Exception("Directory {0} does not exist!".format(
                             repository_path))
         self.repository_path = repository_path
-        config_path = self.__build_yum_config()
-        yum_base = self.__setup_yum_base(config_path)
+
+        # Create the unique repository ID.
+        repoid = "analyzed-repo-{0}".format(os.getpid())
+
+        config_path = self.__build_yum_config(repoid)
+        yum_base = self.__setup_yum_base(config_path, repoid, arch)
         dependency_hash = self.__build_dependency_hash(yum_base)
         return dependency_hash
 
-    def __build_yum_config(self):
+    def __build_yum_config(self, repoid):
         """
         Builds the YUM config that will be used for YUM initialization.
+
+        @param repoid   The ID of repository to be analyzed.
 
         @return The path to generated YUM config file.
         """
@@ -63,9 +70,9 @@ class DependencyGraphBuilder():
         config.set("main", "exactarch", "1")
         config.set("main", "obsoletes", "1")
 
-        config.add_section("analyzed-repo")
-        config.set("analyzed-repo", "name", "Sanitized repository")
-        config.set("analyzed-repo", "baseurl",
+        config.add_section(repoid)
+        config.set(repoid, "name", "Sanitized repository")
+        config.set(repoid, "baseurl",
                    "file://{0}".format(self.repository_path))
 
         with open(config_path, "w") as config_file:
@@ -74,16 +81,28 @@ class DependencyGraphBuilder():
 
         return config_path
 
-    def __setup_yum_base(self, config_path):
+    def __setup_yum_base(self, config_path, repoid, arch):
         """
         Sets the yum base up.
 
         @param config_path  The path to the YUM config file to be used.
+        @param repoid       The ID of repository to be analyzed.
+        @param arch             The architecture to be analyzed
+
+        @return The YUM base ready for querring.
         """
         yum_base = yum.YumBase()
+        yum_base.arch.setup_arch(arch)
         yum_base.doConfigSetup(config_path)
 
         try:
+            # Disable all repositories except one that should be analyzed.
+            for repo in yum_base.repos.findRepos('*'):
+                if repo.id != repoid:
+                    repo.disable()
+                else:
+                    repo.enable()
+
             yum_base.doRepoSetup()
             yum_base.doTsSetup()
             yum_base.doSackSetup()
@@ -112,6 +131,7 @@ class DependencyGraphBuilder():
         yum_sack = yum_base.pkgSack
 
         for package in yum_sack.returnPackages():
+            logging.debug("Processing package: {0}".format(package))
             # Hash of already built dependencies.
             # FIXME: This hash is used just as a set, not as a hash.
             dependencies = {}
@@ -136,8 +156,10 @@ class DependencyGraphBuilder():
                         continue
                     else:
                         if len(provider) != 1:
-                            logging.error("Have choice for {0}".
+                            logging.error("Have choice for {0}:".
                                           format(requirement_name))
+                            for p in provider:
+                                logging.error(" * {0}".format(p))
                         provider = provider[0].name
 
                 providers[requirement_name] = provider
