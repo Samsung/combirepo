@@ -49,6 +49,8 @@ def parse_args():
 
     parser.add_argument("-v", "--verbose", action="store_true", dest="verbose",
                         default=False, help="Enable verbose mode")
+    parser.add_argument("-A", "--arch", type=str, action="store",
+                        help="Specify repo architecture (as for MIC tool)")
     if len(sys.argv) == 1:
         parser.print_help()
         exit(0)
@@ -58,7 +60,12 @@ def parse_args():
 
 if __name__ == '__main__':
     args = parse_args()
+    if args.arch is None:
+        logging.error("Please, specify architecture")
+        sys.exit(1)
     if args.verbose:
         logging.basicConfig(level=logging.DEBUG)
+
     dependency_builder = DependencyGraphBuilder()
-    repository_graph = dependency_builder.build_graph(args.repository)
+    repository_graph = dependency_builder.build_graph(args.repository,
+                                                      args.arch)
