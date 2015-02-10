@@ -159,15 +159,15 @@ class DependencyGraphBuilder():
         config_path = self.__build_yum_config(repoid)
         self.arch = arch
         yum_base = self.__setup_yum_base(config_path, repoid, self.arch)
-        dependency_graph = self.__build_dependency_graph(yum_base)
+        graph, back_graph = self.__build_dependency_graph(yum_base)
 
         if logging.getLogger().getEffectiveLevel() == logging.DEBUG:
-            logging.debug("{0}".format(dependency_graph))
-            dependency_graph.write_dot("dependency_graph.dot")
-            igraph.plot(dependency_graph, target="dependency_graph.png",
+            logging.debug("{0}".format(graph))
+            graph.write_dot("dependency_graph.dot")
+            igraph.plot(graph, target="dependency_graph.png",
                         bbox=(0, 0, 20000, 20000))
 
-        return dependency_graph
+        return graph, back_graph
 
     def __build_yum_config(self, repoid):
         """
@@ -280,6 +280,7 @@ class DependencyGraphBuilder():
         @return The hash map with dependencies for each package.
         """
         dependency_graph = DependencyGraph()
+        back_dependency_graph = DependencyGraph()
 
         providers = {}
         empty_list = []
@@ -290,11 +291,13 @@ class DependencyGraphBuilder():
         i = 0
         packages = yum_sack.returnPackages()
         dependency_graph.add_vertices(len(packages))
+        back_dependency_graph.add_vertices(len(packages))
         names = []
         full_names = []
         locations = []
         for package in packages:
             dependency_graph.set_name_id(package.name, i)
+            back_dependency_graph.set_name_id(package.name, i)
             names.append(package.name)
             full_name = _get_full_package_name(package)
             full_names.append(full_name)
@@ -304,8 +307,12 @@ class DependencyGraphBuilder():
         dependency_graph.vs["name"] = names
         dependency_graph.vs["full_name"] = full_names
         dependency_graph.vs["location"] = locations
+        back_dependency_graph.vs["name"] = names
+        back_dependency_graph.vs["full_name"] = full_names
+        back_dependency_graph.vs["location"] = locations
 
         edges = []
+        back_edges = []
         for package in yum_sack.returnPackages():
             dependencies = _search_dependencies(yum_sack, package, providers)
 
@@ -313,6 +320,8 @@ class DependencyGraphBuilder():
                 id_begin = dependency_graph.get_name_id(package.name)
                 id_end = dependency_graph.get_name_id(dependency)
                 edges.append((id_begin, id_end))
+                back_edges.append((id_end, id_begin))
 
         dependency_graph.add_edges(edges)
-        return dependency_graph
+        back_dependency_graph.add_edges(back_edges)
+        return dependency_graph, back_dependency_graph
