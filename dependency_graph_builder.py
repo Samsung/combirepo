@@ -96,6 +96,7 @@ class DependencyGraphBuilder():
         Initializes the dependency graph builder (does nothing).
         """
         self.repository_path = None
+        self.arch = None
         logging.debug("Initializing dependency graph builder...")
 
     def build_graph(self, repository_path, arch):
@@ -120,7 +121,8 @@ class DependencyGraphBuilder():
         repoid = "analyzed-repo-{0}".format(os.getpid())
 
         config_path = self.__build_yum_config(repoid)
-        yum_base = self.__setup_yum_base(config_path, repoid, arch)
+        self.arch = arch
+        yum_base = self.__setup_yum_base(config_path, repoid, self.arch)
         dependency_graph = self.__build_dependency_graph(yum_base)
 
         if logging.getLogger().getEffectiveLevel() == logging.DEBUG:
@@ -212,12 +214,22 @@ class DependencyGraphBuilder():
         # repository is not accessible. That's why we mannualy search files in
         # the repository.
 
-        file_name = __get_full_package_name(package)
+        file_name = "{0}.rpm".format(_get_full_package_name(package))
+
+        # Check most probably paths to speed up the search.
+        # This gives speed up from 10.760s to 0.711s of program run time.
+        location = os.path.join(self.repository_path, self.arch, file_name)
+        if os.path.exists(location):
+            return location
+
+        location = os.path.join(self.repository_path, file_name)
+        if os.path.exists(location):
+            return location
 
         location = None
         for root, dirs, files in os.walk(self.repository_path):
             if file_name in files:
-                location = os.path.join(self.repository_path, name)
+                location = os.path.join(self.repository_path, file_name)
 
         if location is None:
             logging.error("Failed to find package {0}!".format(package))
@@ -244,14 +256,18 @@ class DependencyGraphBuilder():
         dependency_graph.add_vertices(len(packages))
         names = []
         full_names = []
+        locations = []
         for package in yum_sack.returnPackages():
             id_packages[package.name] = i
             names.append(package.name)
             full_name = _get_full_package_name(package)
             full_names.append(full_name)
+            location = self.__find_package_location(package)
+            locations.append(location)
             i = i + 1
         dependency_graph.vs["name"] = names
         dependency_graph.vs["full_name"] = full_names
+        dependency_graph.vs["location"] = locations
 
         edges = []
         for package in yum_sack.returnPackages():
