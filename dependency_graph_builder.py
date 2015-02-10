@@ -5,7 +5,84 @@ import os
 import sys
 from iniparse import ConfigParser
 import yum
+import cStringIO
+import igraph
 from temporaries import create_temporary_file, create_temporary_directory
+
+
+def _get_full_package_name(package):
+    """
+    Gets full package name from the package, e. g.:
+
+    name-1.1.1-1.1.armv7l
+
+    @param package  YUM package object from YUM package sack.
+
+    @return         Full package name.
+    """
+    output = cStringIO.StringIO()
+    output.write("{0}".format(package))
+    file_name = str(output.getvalue())
+    output.close()
+
+    return file_name
+
+
+def _search_dependencies(yum_sack, package, providers):
+    """
+    Searches the dependencies of the given package in the repository
+
+    @param yum_sack     The YUM sack used to search packages.
+    @param package      The package which dependencies are searched.
+    @param providers    Cached RPM symbols providers
+
+    @return             List of package names on which the given package
+                        depends on
+    """
+    logging.debug("Processing package: {0}".format(package))
+    # Hash of already built dependencies.
+    # FIXME: This hash is used just as a set, not as a hash.
+    dependencies = {}
+
+    for requirement in package.returnPrco('requires'):
+        requirement_name = requirement[0]
+
+        if requirement_name.startswith("rpmlib"):
+            continue
+
+        # Search the provider.
+        # If the provider is already cached, use it to speed up the
+        # search
+        if requirement_name in providers:
+            provider = providers[requirement_name]
+        else:
+            provider = yum_sack.searchProvides(requirement_name)
+
+            if not provider:
+                logging.error("Nothing provides {0} required by {1}".
+                              format(requirement_name, package.name))
+                continue
+            else:
+                if len(provider) != 1:
+                    logging.error("Have choice for {0}:".
+                                  format(requirement_name))
+                    for p in provider:
+                        logging.error(" * {0}".format(p))
+                        # FIXME: In case if we want sabe have-choice
+                        # information in the resulting graph, we need to
+                        # modify this behaviour
+                provider = provider[0].name
+
+        providers[requirement_name] = provider
+
+        if provider == package.name:
+            dependencies[provider] = None
+        if provider in dependencies:
+            continue
+        else:
+            dependencies[provider] = None
+
+    return dependencies.keys()
 
 
 class DependencyGraphBuilder():
@@ -44,8 +121,15 @@ class DependencyGraphBuilder():
 
         config_path = self.__build_yum_config(repoid)
         yum_base = self.__setup_yum_base(config_path, repoid, arch)
-        dependency_hash = self.__build_dependency_hash(yum_base)
-        return dependency_hash
+        dependency_graph = self.__build_dependency_graph(yum_base)
+
+        if logging.getLogger().getEffectiveLevel() == logging.DEBUG:
+            logging.debug("{0}".format(dependency_graph))
+            dependency_graph.write_dot("dependency_graph.dot")
+            igraph.plot(dependency_graph, target="dependency_graph.png",
+                        bbox=(0, 0, 20000, 20000))
+
+        return dependency_graph
 
     def __build_yum_config(self, repoid):
         """
@@ -116,61 +200,66 @@ class DependencyGraphBuilder():
 
         return yum_base
 
-    def __build_dependency_hash(self, yum_base):
+    def __find_package_location(self, package):
+        """
+        Looks for the package location inside the analyzed repository.
+
+        @param package  The package to be found.
+
+        @return The full path to the package file.
+        """
+        # FIXME: Currently YUM information about RPM location inside the given
+        # repository is not accessible. That's why we mannualy search files in
+        # the repository.
+
+        file_name = __get_full_package_name(package)
+
+        location = None
+        for root, dirs, files in os.walk(self.repository_path):
+            if file_name in files:
+                location = os.path.join(self.repository_path, name)
+
+        if location is None:
+            logging.error("Failed to find package {0}!".format(package))
+            return None
+        else:
+            return location
+
+    def __build_dependency_graph(self, yum_base):
         """
         Builds the dependency graph of the repository.
 
         @return The hash map with dependencies for each package.
         """
-        # FIXME: For now the resulting graph consists of nodes that contain
-        # only names of packages. But to modularize the package, we also need
-        # to save relative paths of files.
-        dependency_hash = {}
+        dependency_graph = igraph.Graph(directed=True)
+
         providers = {}
         empty_list = []
         yum_sack = yum_base.pkgSack
 
+        # Remember IDs of packages in the hash.
+        id_packages = {}
+        i = 0
+        packages = yum_sack.returnPackages()
+        dependency_graph.add_vertices(len(packages))
+        names = []
+        full_names = []
         for package in yum_sack.returnPackages():
-            logging.debug("Processing package: {0}".format(package))
-            # Hash of already built dependencies.
-            # FIXME: This hash is used just as a set, not as a hash.
-            dependencies = {}
+            id_packages[package.name] = i
+            names.append(package.name)
+            full_name = _get_full_package_name(package)
+            full_names.append(full_name)
+            i = i + 1
+        dependency_graph.vs["name"] = names
+        dependency_graph.vs["full_name"] = full_names
 
-            for requirement in package.returnPrco('requires'):
-                requirement_name = requirement[0]
+        edges = []
+        for package in yum_sack.returnPackages():
+            dependencies = _search_dependencies(yum_sack, package, providers)
 
-                if requirement_name.startswith("rpmlib"):
-                    continue
+            for dependency in dependencies:
+                edges.append((id_packages[package.name],
+                             id_packages[dependency]))
 
-                # Search the provider.
-                # If the provider is already cached, use it to speed up the
-                # search
-                if requirement_name in providers:
-                    provider = providers[requirement_name]
-                else:
-                    provider = yum_sack.searchProvides(requirement_name)
-
-                    if not provider:
-                        logging.error("Nothing provides {0} required by {1}".
-                                      format(requirement_name, package.name))
-                        continue
-                    else:
-                        if len(provider) != 1:
-                            logging.error("Have choice for {0}:".
-                                          format(requirement_name))
-                            for p in provider:
-                                logging.error(" * {0}".format(p))
-                        provider = provider[0].name
-
-                providers[requirement_name] = provider
-
-                if provider == package.name:
-                    dependencies[provider] = None
-                if provider in dependencies:
-                    continue
-                else:
-                    dependencies[provider] = None
-
-            dependency_hash[package.name] = dependencies.keys()
-
-        return dependency_hash
+        dependency_graph.add_edges(edges)
+        return dependency_graph
