@@ -157,7 +157,7 @@ class DependencyGraphBuilder():
         config.set("main", "obsoletes", "1")
 
         config.add_section(repoid)
-        config.set(repoid, "name", "Sanitized repository")
+        config.set(repoid, "name", "Analyzed repository")
         config.set(repoid, "baseurl",
                    "file://{0}".format(self.repository_path))
 
@@ -257,7 +257,7 @@ class DependencyGraphBuilder():
         names = []
         full_names = []
         locations = []
-        for package in yum_sack.returnPackages():
+        for package in packages:
             id_packages[package.name] = i
             names.append(package.name)
             full_name = _get_full_package_name(package)
