@@ -4,6 +4,7 @@ import argparse
 import sys
 import logging
 from dependency_graph_builder import DependencyGraphBuilder
+from sets import Set
 
 
 def parse_args():
@@ -58,6 +59,61 @@ def parse_args():
     return args
 
 
+def build_forward_dependencies(graph, package):
+    """
+    Builds the set of forward dependencies of the package.
+
+    @param graph        The dependency graph of the repository.
+    @param package      The name of package.
+
+    @return             The set of forward dependencies + package itself
+    """
+    dependencies = Set()
+    source = graph.get_name_id(package)
+    logging.debug("Found id = {0} for package {1}".format(source, package))
+    for vertex in graph.bfsiter(source):
+        dependency = graph.vs[vertex.index]["name"]
+        logging.debug("Processing vertex {0}, its name is "
+                      "{1}".format(vertex.index, dependency))
+        dependencies.add(dependency)
+    return dependencies
+
+
+def build_package_set(graph, back_graph, forward, backward, single, exclude):
+    """
+    Builds the set of marked packages.
+
+    @param graph        The dependency graph of the repository.
+    @param back_graph   The backward dependency graph of the repository.
+    @param forward      The list of packages marked with their forward
+                        dependencies.
+    @param backward     The list of packages marked with their backward
+                        dependencies.
+    @param single       The list of packages marked without dependencies.
+    @param exclude      The list of packages excluded from marked packages.
+
+    @return             The set of marked packages.
+    """
+    marked = Set()
+    if isinstance(forward, list):
+        for package in forward:
+            marked = marked | build_forward_dependencies(graph, package)
+    if isinstance(backward, list):
+        for package in backward:
+            marked = marked | build_forward_dependencies(back_graph, package)
+    if isinstance(single, list):
+        for package in single:
+            marked = marked | Set([package])
+    if isinstance(exclude, list):
+        for package in exclude:
+            marked = marked - Set([package])
+
+    for package in marked:
+        logging.debug("Package {0} is marked".format(package))
+
+    return marked
+
+
 if __name__ == '__main__':
     args = parse_args()
     if args.arch is None:
@@ -67,5 +123,8 @@ if __name__ == '__main__':
         logging.basicConfig(level=logging.DEBUG)
 
     dependency_builder = DependencyGraphBuilder()
-    repository_graph = dependency_builder.build_graph(args.repository,
-                                                      args.arch)
+    (graph, back_graph) = dependency_builder.build_graph(args.repository,
+                                                         args.arch)
+
+    packages = build_package_set(graph, back_graph, args.forward,
+                                 args.backward, args.single, args.exclude)
