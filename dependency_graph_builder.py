@@ -10,6 +10,42 @@ import igraph
 from temporaries import create_temporary_file, create_temporary_directory
 
 
+class DependencyGraph(igraph.Graph):
+    """
+    Wrapper of igraph.Graph used for fast search of vertices by their names.
+    """
+    def __init__(self):
+        """
+        Initializes the dependency graph.
+
+        @return Empty dependency graph.
+        """
+        super(DependencyGraph, self).__init__(directed=True)
+        self.id_names = {}
+
+    def set_name_id(self, name, id_):
+        """
+        Sets the ID of the given name to the given value.
+
+        @param name     The name of package.
+        @param id_      Its ID in the vertex list.
+        """
+        self.id_names[name] = id_
+
+    def get_name_id(self, name):
+        """
+        Gets the ID of the given name.
+
+        @param name     The name of package.
+
+        @return         The ID of package in the vertex list.
+        """
+        if name in self.id_names.keys():
+            return self.id_names[name]
+        else:
+            return None
+
+
 def _get_full_package_name(package):
     """
     Gets full package name from the package, e. g.:
@@ -243,7 +279,7 @@ class DependencyGraphBuilder():
 
         @return The hash map with dependencies for each package.
         """
-        dependency_graph = igraph.Graph(directed=True)
+        dependency_graph = DependencyGraph()
 
         providers = {}
         empty_list = []
@@ -258,7 +294,7 @@ class DependencyGraphBuilder():
         full_names = []
         locations = []
         for package in packages:
-            id_packages[package.name] = i
+            dependency_graph.set_name_id(package.name, i)
             names.append(package.name)
             full_name = _get_full_package_name(package)
             full_names.append(full_name)
@@ -274,8 +310,9 @@ class DependencyGraphBuilder():
             dependencies = _search_dependencies(yum_sack, package, providers)
 
             for dependency in dependencies:
-                edges.append((id_packages[package.name],
-                             id_packages[dependency]))
+                id_begin = dependency_graph.get_name_id(package.name)
+                id_end = dependency_graph.get_name_id(dependency)
+                edges.append((id_begin, id_end))
 
         dependency_graph.add_edges(edges)
         return dependency_graph
