@@ -17,36 +17,36 @@ def parse_args():
     # FIXME: Write a good version string here (with official name and version
     # of the package).
     parser = argparse.ArgumentParser(
-        description='Creates a firmware with sanitized packages')
+        description='Creates a firmware with marked packages')
 
     # FIXME: This argument should be read from config file, not from command
     # line.
     parser.add_argument("repository", type=str,
-                        help="Path to repository with non-sanitized packages")
+                        help="Path to repository with non-marked packages")
 
     # FIXME: Ditto.
-    parser.add_argument("sanitized_repository", type=str,
-                        help="Path to repository with sanitized packages")
+    parser.add_argument("marked_repository", type=str,
+                        help="Path to repository with marked packages")
 
     # FIXME: Ditto.
     parser.add_argument("-f", "--forward", type=str, action="append",
-                        help="The name of package that should be sanitized "
+                        help="The name of package that should be marked "
                         "with all its forward dependencies")
 
     # FIXME: Ditto.
     parser.add_argument("-b", "--backward", type=str, action="append",
-                        help="The name of package that should be sanitized "
+                        help="The name of package that should be marked "
                         "with all its backward dependencies (i. e. "
                         "dependees)")
 
     # FIXME: Ditto.
     parser.add_argument("-s", "--single", type=str, action="append",
-                        help="The name of package that should be sanitized")
+                        help="The name of package that should be marked")
 
     # FIXME: Ditto.
     parser.add_argument("-e", "--exclude", type=str, action="append",
                         help="The name of package that should be excluded from"
-                        " the final list of sanitized packages.")
+                        " the final list of marked packages.")
 
     parser.add_argument("-v", "--verbose", action="store_true", dest="verbose",
                         default=False, help="Enable verbose mode")
