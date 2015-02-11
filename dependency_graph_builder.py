@@ -162,10 +162,12 @@ class DependencyGraphBuilder():
         graph, back_graph = self.__build_dependency_graph(yum_base)
 
         if logging.getLogger().getEffectiveLevel() == logging.DEBUG:
+            logging.debug("{0}".format(igraph.summary(graph)))
             logging.debug("{0}".format(graph))
-            graph.write_dot("dependency_graph.dot")
-            igraph.plot(graph, target="dependency_graph.png",
-                        bbox=(0, 0, 20000, 20000))
+            dot_file_name = "dependency_graph.{0}.dot".format(os.getpid())
+            graph.write_dot(dot_file_name)
+            logging.debug("The graph was exported in DOT format to "
+                          "file {0}".format(dot_file_name))
 
         return graph, back_graph
 
