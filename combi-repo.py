@@ -3,10 +3,35 @@
 import argparse
 import sys
 import logging
+import re
 from sets import Set
 import subprocess
 from dependency_graph_builder import DependencyGraphBuilder
 import temporaries
+
+
+def split_names_list(names):
+    """
+    Splits the given list of names to the list of names, as follows:
+
+    gcc,bash m4
+    flex;bison,yacc
+
+    to python list ["gcc", "bash", "m4", "flex", "bison", "yacc"]
+
+    @param names    The list of names
+
+    @return         The splitted list of names
+    """
+    if names is None:
+        return None
+    splitted_names = []
+    for name in names:
+        for splitted_name in re.split("[\,\;\ \n\t]", name):
+            splitted_names.append(splitted_name)
+
+    logging.debug("Resulting list after splitting: {0}".format(splitted_names))
+    return splitted_names
 
 
 def parse_args():
@@ -84,6 +109,10 @@ def parse_args():
         logging.debug("Output directory is not set, so setting it to current "
                       "directory.")
         args.outdir = os.getcwd()
+    args.forward = split_names_list(args.forward)
+    args.backward = split_names_list(args.backward)
+    args.single = split_names_list(args.single)
+    args.exclude = split_names_list(args.exclude)
 
     return args
 
@@ -186,6 +215,7 @@ def construct_combined_repository(graph, marked_graph, marked_packages,
             continue
         location_from = marked_graph.vs[package_id]["location"]
         create_symlink(package, location_from, repository_path)
+
     if len(packages_not_found) != 0:
         for package in packages_not_found:
             logging.error("Marked package {0} not found in marked "
