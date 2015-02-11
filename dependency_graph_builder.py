@@ -3,11 +3,12 @@
 import logging
 import os
 import sys
+import re
 from iniparse import ConfigParser
 import yum
 import cStringIO
 import igraph
-from temporaries import create_temporary_file, create_temporary_directory
+import temporaries
 
 
 class DependencyGraph(igraph.Graph):
@@ -104,7 +105,7 @@ def _search_dependencies(yum_sack, package, providers):
                                   format(requirement_name))
                     for p in provider:
                         logging.error(" * {0}".format(p))
-                        # FIXME: In case if we want sabe have-choice
+                        # FIXME: In case if we want save have-choice
                         # information in the resulting graph, we need to
                         # modify this behaviour
                 provider = provider[0].name
@@ -164,7 +165,9 @@ class DependencyGraphBuilder():
         if logging.getLogger().getEffectiveLevel() == logging.DEBUG:
             logging.debug("{0}".format(igraph.summary(graph)))
             logging.debug("{0}".format(graph))
-            dot_file_name = "dependency_graph.{0}.dot".format(os.getpid())
+            pid = os.getpid()
+            suffix = re.sub('/', '_', repository_path)
+            dot_file_name = "dependency_graph.{0}.{1}.dot".format(pid, suffix)
             graph.write_dot(dot_file_name)
             logging.debug("The graph was exported in DOT format to "
                           "file {0}".format(dot_file_name))
@@ -179,16 +182,16 @@ class DependencyGraphBuilder():
 
         @return The path to generated YUM config file.
         """
-        config_path = create_temporary_file("yum.conf")
+        config_path = temporaries.create_temporary_file("yum.conf")
         config = ConfigParser()
         # FIXME: This config was get from my Ubuntu default yum config, maybe
         # we should somehow modify it.
         config.add_section("main")
-        cache_path = create_temporary_directory("yum.cache")
+        cache_path = temporaries.create_temporary_directory("yum.cache")
         config.set("main", "cachedir", cache_path)
         config.set("main", "keepcache", "1")
         config.set("main", "debuglevel", "2")
-        log_path = create_temporary_file("yum.log")
+        log_path = temporaries.create_temporary_file("yum.log")
         config.set("main", "logfile", log_path)
         # FIXME: Is this a reason why ARM RPMs are ignored?
         config.set("main", "exactarch", "1")
