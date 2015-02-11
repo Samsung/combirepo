@@ -59,6 +59,10 @@ def parse_args():
                         "a template")
     parser.add_argument("-o", "--outdir", type=str, action="store",
                         dest="outdir", help="Output directory for MIC.")
+    parser.add_argument("-m", "--mirror", action="store_true",
+                        dest="mirror", default=False, help="Whether to mirror"
+                        " not found marked packages from non-marked "
+                        "repository")
     if len(sys.argv) == 1:
         parser.print_help()
         exit(0)
@@ -159,7 +163,8 @@ def create_symlink(package_name, location_from, directory_to):
     os.symlink(location_from, location_to)
 
 
-def construct_combined_repository(graph, marked_graph, marked_packages):
+def construct_combined_repository(graph, marked_graph, marked_packages,
+                                  if_mirror):
     """
     Constructs the temporary repository that consists of symbolic links to
     packages from non-marked and marked repositories.
@@ -167,17 +172,27 @@ def construct_combined_repository(graph, marked_graph, marked_packages):
     @param graph            Dependency graph of the non-marked repository
     @param marked_graph     Dependency graph of the marked repository
     @param marked_packages  Set of marked package names
+    @param if_mirror        Whether to mirror not found marked packages from
+                            non-marked repository
 
     @return             The path to the constructed combined repository.
     """
     repository_path = temporaries.create_temporary_directory("combi-repo")
+    packages_not_found = []
     for package in marked_packages:
         package_id = marked_graph.get_name_id(package)
         if package_id is None:
-            raise Exception("Package {0} is not found in marked "
-                            "repository".format(package))
+            packages_not_found.append(package)
+            continue
         location_from = marked_graph.vs[package_id]["location"]
         create_symlink(package, location_from, repository_path)
+    if len(packages_not_found) != 0:
+        for package in packages_not_found:
+            logging.error("Marked package {0} not found in marked "
+                          "repository".format(package))
+        if not if_mirror:
+            raise Exception("The above listed packages were not found in "
+                            "marked repository")
 
     packages = Set(graph.vs["name"])
     for package in packages:
@@ -256,7 +271,8 @@ if __name__ == '__main__':
                                         args.exclude)
     combined_repository_path = construct_combined_repository(graph,
                                                              marked_graph,
-                                                             marked_packages)
+                                                             marked_packages,
+                                                             args.mirror)
 
     create_image(args.arch, combined_repository_path, args.kickstart_file,
                  args.outdir)
