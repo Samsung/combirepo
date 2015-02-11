@@ -54,10 +54,31 @@ def parse_args():
                         default=False, help="Enable verbose mode")
     parser.add_argument("-A", "--arch", type=str, action="store",
                         help="Specify repo architecture (as for MIC tool)")
+    parser.add_argument("-k", "--kickstart-file", type=str, action="store",
+                        dest="kickstart_file", help="Kickstart file used as "
+                        "a template")
+    parser.add_argument("-o", "--outdir", type=str, action="store",
+                        dest="outdir", help="Output directory for MIC.")
     if len(sys.argv) == 1:
         parser.print_help()
         exit(0)
     args = parser.parse_args()
+
+    if args.arch is None:
+        logging.error("Please, specify architecture")
+        parser.print_help()
+        sys.exit(1)
+
+    if args.kickstart_file is None:
+        logging.error("Kickstart file is not set!")
+        parser.print_help()
+        sys.exit(1)
+
+    if args.outdir is None:
+        logging.debug("Output directory is not set, so setting it to current "
+                      "directory.")
+        args.outdir = os.getcwd()
+
     return args
 
 
@@ -171,11 +192,44 @@ def construct_combined_repository(graph, marked_graph, marked_packages):
     return repository_path
 
 
+def create_image(arch, repository_path, kickstart_file_path,
+                 output_directory_path):
+    """
+    Creates an image using MIC tool, from given repository and given kickstart
+    file. It creates a copy of kickstart file and replaces "repo" to given
+    repository path.
+
+    @param arch                     The architecture of the image
+    @param repository_path          The path to the repository
+    @param kickstart_file           The kickstart file to be used
+    @param output_directory_path    The path to the output directory
+    """
+    modified_kickstart_file_path = create_temporary_file("modified.ks")
+    kickstart_file = open(kickstart_file_path, "r")
+    modified_kickstart_file = open(modified_kickstart_file_path, "w")
+
+    if_repo_statement_found = False
+    for line in kickstart_file:
+        if line.startswith("repo "):
+            if if_repo_statement_found:
+                logging.error("Multiple repo statements found "
+                              "in {0}".format(kickstart_file_path))
+            if_repo_statement_found = True
+            line = "repo --name=combined_repository"
+            line = line + " --baseurl=file://{0}".format(repository_path)
+            line = line + " --ssl_verify=no"
+        modified_kickstart_file.write(line)
+    kickstart_file.close()
+    modified_kickstart_file.close()
+
+    # Now create the image using the "mic" tool:
+    subprocess.call(["sudo", "mic", "create", "loop",
+                    modified_kickstart_file_path, "-A", arch, "-o",
+                    output_directory_path])
+
+
 if __name__ == '__main__':
     args = parse_args()
-    if args.arch is None:
-        logging.error("Please, specify architecture")
-        sys.exit(1)
     if args.verbose:
         logging.basicConfig(level=logging.DEBUG)
 
@@ -199,3 +253,6 @@ if __name__ == '__main__':
     combined_repository_path = construct_combined_repository(graph,
                                                              marked_graph,
                                                              marked_packages)
+
+    create_image(args.arch, combined_repository_path, args.kickstart_file,
+                 args.outdir)
