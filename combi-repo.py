@@ -3,8 +3,10 @@
 import argparse
 import sys
 import logging
-from dependency_graph_builder import DependencyGraphBuilder
 from sets import Set
+import subprocess
+from dependency_graph_builder import DependencyGraphBuilder
+import temporaries
 
 
 def parse_args():
@@ -114,6 +116,61 @@ def build_package_set(graph, back_graph, forward, backward, single, exclude):
     return marked
 
 
+def create_symlink(package_name, location_from, directory_to):
+    """
+    Creates symlink from file to the file with the same name in the another
+    directory.
+
+    @param package          The name of package
+    @param location_from    Source of the symlink
+    @param directory_to     Destination directory of the symlink
+    """
+    if not isinstance(location_from, str):
+        raise Exception("Location of package {0} is not properly"
+                        "set!".format(package_name))
+    location_to = os.path.join(directory_to,
+                               os.path.basename(location_from))
+    os.symlink(location_from, location_to)
+    logging.debug("Created symlink from {0} to {1}".format(location_from,
+                                                           location_to))
+
+
+def construct_combined_repository(graph, marked_graph, marked_packages):
+    """
+    Constructs the temporary repository that consists of symbolic links to
+    packages from non-marked and marked repositories.
+
+    @param graph            Dependency graph of the non-marked repository
+    @param marked_graph     Dependency graph of the marked repository
+    @param marked_packages  Set of marked package names
+
+    @return             The path to the constructed combined repository.
+    """
+    repository_path = temporaries.create_temporary_directory("combi-repo")
+    for package in marked_packages:
+        package_id = marked_graph.get_name_id(package)
+        if package_id is None:
+            raise Exception("Package {0} is not found in marked "
+                            "repository".format(package))
+        location_from = marked_graph.vs[package_id]["location"]
+        create_symlink(package, location_from, repository_path)
+
+    for package in graph.vs["name"]:
+        if package in marked_packages:
+            continue
+        package_id = graph.get_name_id(package)
+        location_from = graph.vs[package_id]["location"]
+        create_symlink(package, location_from, repository_path)
+
+    if logging.getLogger().getEffectiveLevel() == logging.DEBUG:
+        subprocess.call(["ls", "-l", repository_path])
+
+    # Now create the repository with "createrepo" tool:
+    subprocess.call(["createrepo", repository_path])
+
+    return repository_path
+
+
 if __name__ == '__main__':
     args = parse_args()
     if args.arch is None:
@@ -123,8 +180,22 @@ if __name__ == '__main__':
         logging.basicConfig(level=logging.DEBUG)
 
     dependency_builder = DependencyGraphBuilder()
-    (graph, back_graph) = dependency_builder.build_graph(args.repository,
-                                                         args.arch)
+    graph, back_graph = dependency_builder.build_graph(args.repository,
+                                                       args.arch)
+    # Generally speaking, sets of packages in non-marked and marked
+    # repositories can differ. That's why we need to build graphs also for
+    # marked repository.
+    # Nevertheless we assume that graph of marked repository is isomorphic
+    # to some subgraph of the non-marked repository graph.
+    # FIXME: If it's not true in some pratical cases, then the special
+    # treatment is needed.
+    marked_graphs = dependency_builder.build_graph(args.marked_repository,
+                                                   args.arch)
+    marked_graph = marked_graphs[0]
 
-    packages = build_package_set(graph, back_graph, args.forward,
-                                 args.backward, args.single, args.exclude)
+    marked_packages = build_package_set(graph, back_graph, args.forward,
+                                        args.backward, args.single,
+                                        args.exclude)
+    combined_repository_path = construct_combined_repository(graph,
+                                                             marked_graph,
+                                                             marked_packages)
