@@ -63,6 +63,8 @@ def parse_args():
         parser.print_help()
         exit(0)
     args = parser.parse_args()
+    if args.verbose:
+        logging.basicConfig(level=logging.DEBUG)
 
     if args.arch is None:
         logging.error("Please, specify architecture")
@@ -151,9 +153,10 @@ def create_symlink(package_name, location_from, directory_to):
                         "set!".format(package_name))
     location_to = os.path.join(directory_to,
                                os.path.basename(location_from))
+
+    logging.debug("Creating symlink from {0} to {1}".format(location_from,
+                                                            location_to))
     os.symlink(location_from, location_to)
-    logging.debug("Created symlink from {0} to {1}".format(location_from,
-                                                           location_to))
 
 
 def construct_combined_repository(graph, marked_graph, marked_packages):
@@ -176,7 +179,8 @@ def construct_combined_repository(graph, marked_graph, marked_packages):
         location_from = marked_graph.vs[package_id]["location"]
         create_symlink(package, location_from, repository_path)
 
-    for package in graph.vs["name"]:
+    packages = Set(graph.vs["name"])
+    for package in packages:
         if package in marked_packages:
             continue
         package_id = graph.get_name_id(package)
@@ -223,15 +227,15 @@ def create_image(arch, repository_path, kickstart_file_path,
     modified_kickstart_file.close()
 
     # Now create the image using the "mic" tool:
-    subprocess.call(["sudo", "mic", "create", "loop",
-                    modified_kickstart_file_path, "-A", arch, "-o",
-                    output_directory_path])
+    mic_command = ["sudo", "mic", "create", "loop",
+                   modified_kickstart_file_path, "-A", arch, "-o",
+                   output_directory_path]
+    logging.debug("mic command: {0}".format(mic_command))
+    subprocess.call(mic_command)
 
 
 if __name__ == '__main__':
     args = parse_args()
-    if args.verbose:
-        logging.basicConfig(level=logging.DEBUG)
 
     dependency_builder = DependencyGraphBuilder()
     graph, back_graph = dependency_builder.build_graph(args.repository,
