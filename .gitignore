@@ -1,0 +1,16 @@
+# This file contains regular expressions of file names that should be ignored
+# by git.
+
+# By default combi-repo.py generates images exactly in the current directory:
+*.img
+# Also it creates XML files with information about generated images:
+*.xml
+# Also it creates manifest file about generated images:
+manifest.json
+
+# DOT files with dependency graphs are generated in verbose mode:
+*.dot
+
+# If combi-repo.py is run just from the git directory, *.pyc files are
+# generated:
+*.pyc
