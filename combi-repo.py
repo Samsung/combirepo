@@ -1,7 +1,10 @@
 #!/usr/bin/env python2.7
 # -*- coding: utf-8 -*-
+import os
+import shutil
 import argparse
 import sys
+import glob
 import logging
 import re
 from sets import Set
@@ -88,6 +91,12 @@ def parse_args():
                         dest="mirror", default=False, help="Whether to mirror"
                         " not found marked packages from non-marked "
                         "repository")
+    parser.add_argument("-g", "--groups", type=str, action="store",
+                        dest="groups", help="group.xml from original "
+                        "repository")
+    parser.add_argument("-p", "--patterns", type=str, action="store",
+                        dest="patterns", help="pattern.xml from original "
+                        "repository")
     if len(sys.argv) == 1:
         parser.print_help()
         exit(0)
@@ -104,6 +113,20 @@ def parse_args():
         logging.error("Kickstart file is not set!")
         parser.print_help()
         sys.exit(1)
+
+    if args.groups is None:
+        logging.error("Please, set path to group.xml")
+        parser.print_help()
+        sys.exit(1)
+    else:
+        args.groups = os.path.abspath(args.groups)
+
+    if args.patterns is None:
+        logging.error("Please, set path to patterns.xml")
+        parser.print_help()
+        sys.exit(1)
+    else:
+        args.patterns = os.path.abspath(args.patterns)
 
     if args.outdir is None:
         logging.debug("Output directory is not set, so setting it to current "
@@ -182,8 +205,14 @@ def create_symlink(package_name, location_from, directory_to):
     @param directory_to     Destination directory of the symlink
     """
     if not isinstance(location_from, str):
+        logging.error("location_from = {0}".format(location_from))
+        logging.error("Location of package {0} is not properly "
+                      "set!".format(package_name))
+        """
         raise Exception("Location of package {0} is not properly"
                         "set!".format(package_name))
+        """
+        return
     location_to = os.path.join(directory_to,
                                os.path.basename(location_from))
 
@@ -193,7 +222,7 @@ def create_symlink(package_name, location_from, directory_to):
 
 
 def construct_combined_repository(graph, marked_graph, marked_packages,
-                                  if_mirror):
+                                  if_mirror, groups, patterns):
     """
     Constructs the temporary repository that consists of symbolic links to
     packages from non-marked and marked repositories.
@@ -203,6 +232,8 @@ def construct_combined_repository(graph, marked_graph, marked_packages,
     @param marked_packages  Set of marked package names
     @param if_mirror        Whether to mirror not found marked packages from
                             non-marked repository
+    @param groups           Path to group.xml
+    @param patterns         Path to patterns.xml
 
     @return             The path to the constructed combined repository.
     """
@@ -236,7 +267,20 @@ def construct_combined_repository(graph, marked_graph, marked_packages,
         subprocess.call(["ls", "-l", repository_path])
 
     # Now create the repository with "createrepo" tool:
-    subprocess.call(["createrepo", repository_path])
+    repodata_path = os.path.join(repository_path, "repodata")
+    os.mkdir(repodata_path)
+    groups_local = os.path.join(repodata_path, "group.xml")
+    shutil.copy(groups, groups_local)
+    patterns_local = os.path.join(repodata_path, "patterns.xml")
+    shutil.copy(patterns, patterns_local)
+    subprocess.call(["createrepo", repository_path, "-g", "repodata/group.xml",
+                    "--database", "--unique-md-filenames"])
+    subprocess.call(["modifyrepo", patterns_local, repodata_path])
+    initial_directory = os.getcwd()
+    os.chdir(repodata_path)
+    for group_file in glob.glob("*group.xml"):
+        subprocess.call(["modifyrepo", "--remove", group_file, repodata_path])
+    os.chdir(initial_directory)
 
     return repository_path
 
@@ -253,7 +297,7 @@ def create_image(arch, repository_path, kickstart_file_path,
     @param kickstart_file           The kickstart file to be used
     @param output_directory_path    The path to the output directory
     """
-    modified_kickstart_file_path = create_temporary_file("modified.ks")
+    modified_kickstart_file_path = temporaries.create_temporary_file("mod.ks")
     kickstart_file = open(kickstart_file_path, "r")
     modified_kickstart_file = open(modified_kickstart_file_path, "w")
 
@@ -263,6 +307,7 @@ def create_image(arch, repository_path, kickstart_file_path,
             if if_repo_statement_found:
                 logging.error("Multiple repo statements found "
                               "in {0}".format(kickstart_file_path))
+                continue
             if_repo_statement_found = True
             line = "repo --name=combined_repository"
             line = line + " --baseurl=file://{0}".format(repository_path)
@@ -302,7 +347,9 @@ if __name__ == '__main__':
     combined_repository_path = construct_combined_repository(graph,
                                                              marked_graph,
                                                              marked_packages,
-                                                             args.mirror)
+                                                             args.mirror,
+                                                             args.groups,
+                                                             args.patterns)
 
     create_image(args.arch, combined_repository_path, args.kickstart_file,
                  args.outdir)
