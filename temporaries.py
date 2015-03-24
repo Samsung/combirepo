@@ -25,7 +25,8 @@ def create_temporary_file(file_suffix):
     file_descriptor, path = tempfile.mkstemp(prefix='combi-repo.',
                                              suffix="." + file_suffix)
     os.close(file_descriptor)  # This helps to avoid the file descriptor leak.
-    atexit.register(os.remove, path)  # It will be removed at exit.
+    if logging.getLogger().getEffectiveLevel() != logging.DEBUG:
+        atexit.register(os.remove, path)  # It will be removed at exit.
     logging.debug("Created temporary file {0}".format(path))
     return path
 
@@ -43,6 +44,7 @@ def create_temporary_directory(directory_suffix):
     """
     path = tempfile.mkdtemp(prefix='combi-repo.',
                             suffix="." + directory_suffix)
-    atexit.register(shutil.rmtree, path)  # It will be removed at exit.
+    if logging.getLogger().getEffectiveLevel() != logging.DEBUG:
+        atexit.register(shutil.rmtree, path)  # It will be removed at exit.
     logging.debug("Created temporary file {0}".format(path))
     return path
