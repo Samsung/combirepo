@@ -257,9 +257,18 @@ class DependencyGraphBuilder():
 
         file_name = "{0}.rpm".format(_get_full_package_name(package))
 
+        # Workaround for the bug when YUM returns "1:coreutils-6.9-10.2.armv7l"
+        # as package name
+        file_name = re.sub(r'[0-9]*:(.*)', r'\1', file_name)
+        logging.debug("Searching file {0}".format(file_name))
+
         # Check most probably paths to speed up the search.
         # This gives speed up from 10.760s to 0.711s of program run time.
         location = os.path.join(self.repository_path, self.arch, file_name)
+        if os.path.exists(location):
+            return location
+
+        location = os.path.join(self.repository_path, "noarch", file_name)
         if os.path.exists(location):
             return location
 
@@ -273,8 +282,7 @@ class DependencyGraphBuilder():
                 location = os.path.join(self.repository_path, file_name)
 
         if location is None:
-            logging.error("Failed to find package {0}!".format(package))
-            return None
+            raise Exception("Failed to find package {0}!".format(package))
         else:
             return location
 
@@ -301,6 +309,7 @@ class DependencyGraphBuilder():
         full_names = []
         locations = []
         for package in packages:
+            logging.debug("Processing package {0}".format(package))
             dependency_graph.set_name_id(package.name, i)
             back_dependency_graph.set_name_id(package.name, i)
             names.append(package.name)
