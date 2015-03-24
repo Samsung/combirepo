@@ -107,6 +107,11 @@ def parse_args():
                         dest="mirror", default=False, help="Whether to mirror"
                         " not found marked packages from non-marked "
                         "repository")
+    parser.add_argument("-r", "--regenerate-repodata", action="store_true",
+                        default=False, dest="regenerate_repodata",
+                        help="Whether to re-generate the "
+                        "repodata for specified repositories")
+
     if len(sys.argv) == 1:
         parser.print_help()
         sys.exit(0)
@@ -229,6 +234,43 @@ def create_symlink(package_name, location_from, directory_to):
     os.symlink(location_from, location_to)
 
 
+def workaround_repodata_open_checksum_bug(repodata_path):
+    """
+    Workarounds some bug in repodata creation.
+
+    This is a workaround for the case when tag <open-checksum> for group.xml
+    is not created in repomd.xml file.
+
+    Nota Bene: This somehow reproduces the standard Tizen repodata creation.
+    If you see repodata on release servers, group.xml in them is not
+    registered in repomd.xml file, but *.group.xml.gz file is registered in
+    it.
+
+    Without this workaround mic will fail during the repodata parsing.
+
+    @param repodata_path  The path to the repodata directory.
+    """
+    initial_directory = os.getcwd()
+    os.chdir(repodata_path)
+    backup_group_files = []
+    for group_file in glob.glob("*group.xml"):
+        backup_group_file = temporaries.create_temporary_file("group.xml")
+        shutil.copy(group_file, backup_group_file)
+        backup_group_files.append((group_file, backup_group_file))
+        exit_value = subprocess.call(["modifyrepo", "--remove", group_file,
+                                     repodata_path])
+        if exit_value != 0:
+            raise Exception("modifyrepo failed with exit value = "
+                            "{0}".format(exit_value))
+
+    # Restore backuped group files, but they will not be registered in
+    # repomd.xml file anymore.
+    for backup_group_file in backup_group_files:
+        shutil.copy(backup_group_file[1], backup_group_file[0])
+
+    os.chdir(initial_directory)
+
+
 def construct_repodata(repository_path, groups, patterns):
     """
     Constructs the repodata in the given repository
@@ -237,47 +279,39 @@ def construct_repodata(repository_path, groups, patterns):
     @param groups           Path to group.xml (may be empty)
     @param patterns         Path to patterns.xml (may be empty)
     """
+    repository_path = os.path.abspath(repository_path)
+    if groups is not None:
+        groups = os.path.abspath(groups)
+    if patterns is not None:
+        patterns = os.path.abspath(patterns)
+
     repodata_path = os.path.join(repository_path, "repodata")
-    os.mkdir(repodata_path)
+    if not os.path.isdir(repodata_path):
+        os.mkdir(repodata_path)
     createrepo_command = ["createrepo", repository_path, "--database",
                           "--unique-md-filenames"]
     if groups is not None:
         groups_local = os.path.join(repodata_path, "group.xml")
-        shutil.copy(groups, groups_local)
-        createrepo_command.append(["-g", "repodata/group.xml"])
+        if groups != groups_local:
+            shutil.copy(groups, groups_local)
+        createrepo_command.extend(["-g", "repodata/group.xml"])
     logging.debug("createrepo command: \n{0}".format(createrepo_command))
-    subprocess.call(createrepo_command)
+    exit_value = subprocess.call(createrepo_command)
+    if exit_value != 0:
+        raise Exception("createrepo failed with exit value = "
+                        "{0}".format(exit_value))
 
     if patterns is not None:
         patterns_local = os.path.join(repodata_path, "patterns.xml")
-        shutil.copy(patterns, patterns_local)
-        subprocess.call(["modifyrepo", patterns_local, repodata_path])
+        if patterns != patterns_local:
+            shutil.copy(patterns, patterns_local)
+        exit_value = subprocess.call(["modifyrepo", patterns_local,
+                                     repodata_path])
+        if exit_value != 0:
+            raise Exception("modifyrepo failed with exit value = "
+                            "{0}".format(exit_value))
 
-    # This is a workaround for the case when tag <open-checksum> for group.xml
-    # is not created in repomd.xml file.
-    #
-    # Nota Bene: This somehow reproduces the standard Tizen repodata creation.
-    # If you see repodata on release servers, group.xml in them is not
-    # registered in repomd.xml file, but *.group.xml.gz file is registered in
-    # it.
-    #
-    # Without this workaround mic will fail during the repodata parsing.
-
-    initial_directory = os.getcwd()
-    os.chdir(repodata_path)
-    backup_group_files = []
-    for group_file in glob.glob("*group.xml"):
-        backup_group_file = temporaries.create_temporary_file("group.xml")
-        shutil.copy(group_file, backup_group_file)
-        backup_group_files.append((group_file, backup_group_file))
-        subprocess.call(["modifyrepo", "--remove", group_file, repodata_path])
-
-    # Restore backuped group files, but they will not be registered in
-    # repomd.xml file anymore.
-    for backup_group_file in backup_group_files:
-        shutil.copy(backup_group_file[1], backup_group_file[0])
-
-    os.chdir(initial_directory)
+    workaround_repodata_open_checksum_bug(repodata_path)
 
 
 def construct_combined_repository(graph, marked_graph, marked_packages,
@@ -352,7 +386,8 @@ def create_image(arch, repository_names, repository_paths, kickstart_file_path,
                 if " --name={0} ".format(repository_names[i]) in line:
                     path = repository_paths[i]
                     line = re.sub(r'\s+--baseurl=\S+\s+',
-                                  r" --baseurl={0} ".format(path), line)
+                                  r" --baseurl=file://{0} ".format(path),
+                                  line)
                     logging.debug("Writting the following line to kickstart "
                                   "file: \n{0}".format(line))
         modified_kickstart_file.write(line)
@@ -365,6 +400,25 @@ def create_image(arch, repository_names, repository_paths, kickstart_file_path,
                    output_directory_path, "--tmpfs"]
     logging.debug("mic command: {0}".format(mic_command))
     subprocess.call(mic_command)
+
+
+def find_groups_and_patterns(repository_path):
+    """
+    Finds the group.xml and patterns.xml in the given repository.
+
+    @param repository_path  The path to the repository
+
+    @return                 Paths to group.xml and patterns.xml
+    """
+    groups = None
+    patterns = None
+    for root, dirs, files in os.walk(repository_path):
+        for file_name in files:
+            if file_name.endswith("group.xml"):
+                groups = os.path.join(root, file_name)
+            if file_name.endswith("patterns.xml"):
+                patterns = os.path.join(root, file_name)
+    return groups, patterns
 
 
 def process_repository_triplet(triplet, dependency_builder, args):
@@ -406,15 +460,7 @@ def process_repository_triplet(triplet, dependency_builder, args):
     marked_packages = build_package_set(graph, back_graph, args.forward,
                                         args.backward, args.single,
                                         args.exclude)
-    groups = None
-    patterns = None
-    for root, dirs, files in os.walk(repository_path):
-        for file_name in files:
-            if file_name.endswith("group.xml"):
-                groups = os.path.join(root, file_name)
-            if file_name.endswith("patterns.xml"):
-                patterns = os.path.join(root, file_name)
-
+    groups, patterns = find_groups_and_patterns(repository_path)
     combined_repository_path = construct_combined_repository(graph,
                                                              marked_graph,
                                                              marked_packages,
@@ -424,8 +470,23 @@ def process_repository_triplet(triplet, dependency_builder, args):
     return combined_repository_path
 
 
+def regenerate_repodata(repository_path):
+    """
+    Re-generates the repodata for the given repository.
+
+    @param repository_path  The path to the repository.
+    """
+    groups, patterns = find_groups_and_patterns(repository_path)
+    construct_repodata(repository_path, groups, patterns)
+
+
 if __name__ == '__main__':
     args = parse_args()
+
+    if args.regenerate_repodata:
+        for triplet in args.triplets:
+            regenerate_repodata(triplet[1])
+            regenerate_repodata(triplet[2])
 
     dependency_builder = DependencyGraphBuilder()
 
