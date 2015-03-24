@@ -37,6 +37,23 @@ def split_names_list(names):
     return splitted_names
 
 
+def convert_list_to_sequential_tuples(flat_list, tuple_length):
+    """
+    Groups a list into consecutive n-tuples, e.g.:
+    ([0,3,4,10,2,3], 2) => [(0,3), (4,10), (2,3)]
+
+    Incomplete tuples are discarded, e.g.:
+    (range(10), 3) => [(0, 1, 2), (3, 4, 5), (6, 7, 8)]
+
+    @param flat_list    The flat list.
+    @param tuple_length The length of generated tuples.
+
+    @return             The list of tuples constructed from original flat
+                        list.
+    """
+    return zip(*[flat_list[i::tuple_length] for i in range(tuple_length)])
+
+
 def parse_args():
     """
     Parses command-line arguments and builds args structure with which the
@@ -51,12 +68,11 @@ def parse_args():
 
     # FIXME: This argument should be read from config file, not from command
     # line.
-    parser.add_argument("repository", type=str,
-                        help="Path to repository with non-marked packages")
-
-    # FIXME: Ditto.
-    parser.add_argument("marked_repository", type=str,
-                        help="Path to repository with marked packages")
+    parser.add_argument("triplets", type=str, nargs='+',
+                        help="Triplets: 1. Name of "
+                        "repository as specified in kickstart file, 2. Path "
+                        "to non-marked repository, 3. Path to marked "
+                        "repository.")
 
     # FIXME: Ditto.
     parser.add_argument("-f", "--forward", type=str, action="append",
@@ -91,18 +107,24 @@ def parse_args():
                         dest="mirror", default=False, help="Whether to mirror"
                         " not found marked packages from non-marked "
                         "repository")
-    parser.add_argument("-g", "--groups", type=str, action="store",
-                        dest="groups", help="group.xml from original "
-                        "repository")
-    parser.add_argument("-p", "--patterns", type=str, action="store",
-                        dest="patterns", help="pattern.xml from original "
-                        "repository")
     if len(sys.argv) == 1:
         parser.print_help()
-        exit(0)
+        sys.exit(0)
     args = parser.parse_args()
     if args.verbose:
         logging.basicConfig(level=logging.DEBUG)
+
+    if len(args.triplets) == 0:
+        logging.error("No repository triplet provided!")
+        sys.exit(1)
+    if len(args.triplets) % 3 != 0:
+        logging.error("Number of positional arguments should be devided by "
+                      "3")
+        sys.exit(1)
+    else:
+        logging.debug("Triplets before parsing: {0}".format(args.triplets))
+        args.triplets = convert_list_to_sequential_tuples(args.triplets, 3)
+        logging.debug("Triplets after parsing: {0}".format(args.triplets))
 
     if args.arch is None:
         logging.error("Please, specify architecture")
@@ -113,20 +135,6 @@ def parse_args():
         logging.error("Kickstart file is not set!")
         parser.print_help()
         sys.exit(1)
-
-    if args.groups is None:
-        logging.error("Please, set path to group.xml")
-        parser.print_help()
-        sys.exit(1)
-    else:
-        args.groups = os.path.abspath(args.groups)
-
-    if args.patterns is None:
-        logging.error("Please, set path to patterns.xml")
-        parser.print_help()
-        sys.exit(1)
-    else:
-        args.patterns = os.path.abspath(args.patterns)
 
     if args.outdir is None:
         logging.debug("Output directory is not set, so setting it to current "
@@ -221,6 +229,57 @@ def create_symlink(package_name, location_from, directory_to):
     os.symlink(location_from, location_to)
 
 
+def construct_repodata(repository_path, groups, patterns):
+    """
+    Constructs the repodata in the given repository
+
+    @param repository_path  The path to the repository
+    @param groups           Path to group.xml (may be empty)
+    @param patterns         Path to patterns.xml (may be empty)
+    """
+    repodata_path = os.path.join(repository_path, "repodata")
+    os.mkdir(repodata_path)
+    createrepo_command = ["createrepo", repository_path, "--database",
+                          "--unique-md-filenames"]
+    if groups is not None:
+        groups_local = os.path.join(repodata_path, "group.xml")
+        shutil.copy(groups, groups_local)
+        createrepo_command.append(["-g", "repodata/group.xml"])
+    logging.debug("createrepo command: \n{0}".format(createrepo_command))
+    subprocess.call(createrepo_command)
+
+    if patterns is not None:
+        patterns_local = os.path.join(repodata_path, "patterns.xml")
+        shutil.copy(patterns, patterns_local)
+        subprocess.call(["modifyrepo", patterns_local, repodata_path])
+
+    # This is a workaround for the case when tag <open-checksum> for group.xml
+    # is not created in repomd.xml file.
+    #
+    # Nota Bene: This somehow reproduces the standard Tizen repodata creation.
+    # If you see repodata on release servers, group.xml in them is not
+    # registered in repomd.xml file, but *.group.xml.gz file is registered in
+    # it.
+    #
+    # Without this workaround mic will fail during the repodata parsing.
+
+    initial_directory = os.getcwd()
+    os.chdir(repodata_path)
+    backup_group_files = []
+    for group_file in glob.glob("*group.xml"):
+        backup_group_file = temporaries.create_temporary_file("group.xml")
+        shutil.copy(group_file, backup_group_file)
+        backup_group_files.append((group_file, backup_group_file))
+        subprocess.call(["modifyrepo", "--remove", group_file, repodata_path])
+
+    # Restore backuped group files, but they will not be registered in
+    # repomd.xml file anymore.
+    for backup_group_file in backup_group_files:
+        shutil.copy(backup_group_file[1], backup_group_file[0])
+
+    os.chdir(initial_directory)
+
+
 def construct_combined_repository(graph, marked_graph, marked_packages,
                                   if_mirror, groups, patterns):
     """
@@ -266,26 +325,11 @@ def construct_combined_repository(graph, marked_graph, marked_packages,
     if logging.getLogger().getEffectiveLevel() == logging.DEBUG:
         subprocess.call(["ls", "-l", repository_path])
 
-    # Now create the repository with "createrepo" tool:
-    repodata_path = os.path.join(repository_path, "repodata")
-    os.mkdir(repodata_path)
-    groups_local = os.path.join(repodata_path, "group.xml")
-    shutil.copy(groups, groups_local)
-    patterns_local = os.path.join(repodata_path, "patterns.xml")
-    shutil.copy(patterns, patterns_local)
-    subprocess.call(["createrepo", repository_path, "-g", "repodata/group.xml",
-                    "--database", "--unique-md-filenames"])
-    subprocess.call(["modifyrepo", patterns_local, repodata_path])
-    initial_directory = os.getcwd()
-    os.chdir(repodata_path)
-    for group_file in glob.glob("*group.xml"):
-        subprocess.call(["modifyrepo", "--remove", group_file, repodata_path])
-    os.chdir(initial_directory)
-
+    construct_repodata(repository_path, groups, patterns)
     return repository_path
 
 
-def create_image(arch, repository_path, kickstart_file_path,
+def create_image(arch, repository_names, repository_paths, kickstart_file_path,
                  output_directory_path):
     """
     Creates an image using MIC tool, from given repository and given kickstart
@@ -293,7 +337,8 @@ def create_image(arch, repository_path, kickstart_file_path,
     repository path.
 
     @param arch                     The architecture of the image
-    @param repository_path          The path to the repository
+    @param repository_names         The names of repositorues
+    @param repository_paths         The repository paths
     @param kickstart_file           The kickstart file to be used
     @param output_directory_path    The path to the output directory
     """
@@ -301,17 +346,15 @@ def create_image(arch, repository_path, kickstart_file_path,
     kickstart_file = open(kickstart_file_path, "r")
     modified_kickstart_file = open(modified_kickstart_file_path, "w")
 
-    if_repo_statement_found = False
     for line in kickstart_file:
         if line.startswith("repo "):
-            if if_repo_statement_found:
-                logging.error("Multiple repo statements found "
-                              "in {0}".format(kickstart_file_path))
-                continue
-            if_repo_statement_found = True
-            line = "repo --name=combined_repository"
-            line = line + " --baseurl=file://{0}".format(repository_path)
-            line = line + " --ssl_verify=no"
+            for i in range(len(repository_names)):
+                if " --name={0} ".format(repository_names[i]) in line:
+                    path = repository_paths[i]
+                    line = re.sub(r'\s+--baseurl=\S+\s+',
+                                  r" --baseurl={0} ".format(path), line)
+                    logging.debug("Writting the following line to kickstart "
+                                  "file: \n{0}".format(line))
         modified_kickstart_file.write(line)
     kickstart_file.close()
     modified_kickstart_file.close()
@@ -319,16 +362,35 @@ def create_image(arch, repository_path, kickstart_file_path,
     # Now create the image using the "mic" tool:
     mic_command = ["sudo", "mic", "create", "loop",
                    modified_kickstart_file_path, "-A", arch, "-o",
-                   output_directory_path]
+                   output_directory_path, "--tmpfs"]
     logging.debug("mic command: {0}".format(mic_command))
     subprocess.call(mic_command)
 
 
-if __name__ == '__main__':
-    args = parse_args()
+def process_repository_triplet(triplet, dependency_builder, args):
+    """
+    Processes one repository triplet and constructs combined repository for
+    it.
 
-    dependency_builder = DependencyGraphBuilder()
-    graph, back_graph = dependency_builder.build_graph(args.repository,
+    @param triplet              The repository triplet.
+    @param dependency_builder   The dependenct graph builder.
+    @param args                 Common parsed command-line arguments.
+
+    @return                     Path to combined repository.
+    """
+
+    repository_path = triplet[1]
+    if not os.path.isdir(repository_path):
+        logging.error("Repository {0} does not "
+                      "exist!".format(repository_path))
+        sys.exit(1)
+    marked_repository_path = triplet[2]
+    if not os.path.isdir(marked_repository_path):
+        logging.error("Repository {0} does not "
+                      "exist!".format(marked_repository_path))
+        sys.exit(1)
+
+    graph, back_graph = dependency_builder.build_graph(repository_path,
                                                        args.arch)
     # Generally speaking, sets of packages in non-marked and marked
     # repositories can differ. That's why we need to build graphs also for
@@ -337,19 +399,42 @@ if __name__ == '__main__':
     # to some subgraph of the non-marked repository graph.
     # FIXME: If it's not true in some pratical cases, then the special
     # treatment is needed.
-    marked_graphs = dependency_builder.build_graph(args.marked_repository,
+    marked_graphs = dependency_builder.build_graph(marked_repository_path,
                                                    args.arch)
     marked_graph = marked_graphs[0]
 
     marked_packages = build_package_set(graph, back_graph, args.forward,
                                         args.backward, args.single,
                                         args.exclude)
+    groups = None
+    patterns = None
+    for root, dirs, files in os.walk(repository_path):
+        for file_name in files:
+            if file_name.endswith("group.xml"):
+                groups = os.path.join(root, file_name)
+            if file_name.endswith("patterns.xml"):
+                patterns = os.path.join(root, file_name)
+
     combined_repository_path = construct_combined_repository(graph,
                                                              marked_graph,
                                                              marked_packages,
                                                              args.mirror,
-                                                             args.groups,
-                                                             args.patterns)
+                                                             groups,
+                                                             patterns)
+    return combined_repository_path
 
-    create_image(args.arch, combined_repository_path, args.kickstart_file,
-                 args.outdir)
+
+if __name__ == '__main__':
+    args = parse_args()
+
+    dependency_builder = DependencyGraphBuilder()
+
+    combined_repository_paths = []
+    repository_names = []
+    for triplet in args.triplets:
+        path = process_repository_triplet(triplet, dependency_builder, args)
+        combined_repository_paths.append(path)
+        repository_names.append(triplet[0])
+
+    create_image(args.arch, repository_names, combined_repository_paths,
+                 args.kickstart_file, args.outdir)
