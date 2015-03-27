@@ -54,6 +54,63 @@ def convert_list_to_sequential_tuples(flat_list, tuple_length):
     return zip(*[flat_list[i::tuple_length] for i in range(tuple_length)])
 
 
+def run_parser(parser):
+    """
+    Runs the constructed parser and performs some additional actions.
+
+    @param parseer  The prepared parser.
+
+    @return         The parsed arguments structure.
+    """
+    if len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(0)
+    args = parser.parse_args()
+    if args.verbose:
+        logging.basicConfig(level=logging.DEBUG)
+
+    if len(args.triplets) == 0:
+        logging.error("No repository triplet provided!")
+        sys.exit(1)
+    if len(args.triplets) % 3 != 0:
+        logging.error("Number of positional arguments should be devided by "
+                      "3")
+        sys.exit(1)
+    else:
+        logging.debug("Triplets before parsing: {0}".format(args.triplets))
+        args.triplets = convert_list_to_sequential_tuples(args.triplets, 3)
+        logging.debug("Triplets after parsing: {0}".format(args.triplets))
+
+    if args.arch is None:
+        logging.error("Please, specify architecture")
+        parser.print_help()
+        sys.exit(1)
+
+    if args.kickstart_file is None:
+        logging.error("Kickstart file is not set!")
+        parser.print_help()
+        sys.exit(1)
+
+    if args.outdir is None:
+        logging.debug("Output directory is not set, so setting it to current "
+                      "directory.")
+        args.outdir = os.getcwd()
+
+    if args.greedy:
+        args.mirror = True
+        if (args.forward is not None or args.backward is not None or
+                args.single is not None or args.exclude is not None):
+            logging.error("Options controlling dependecies are ignored in "
+                          "greedy mode!")
+            sys.exit(1)
+
+    args.forward = split_names_list(args.forward)
+    args.backward = split_names_list(args.backward)
+    args.single = split_names_list(args.single)
+    args.exclude = split_names_list(args.exclude)
+    return args
+
+
 def parse_args():
     """
     Parses command-line arguments and builds args structure with which the
@@ -111,45 +168,12 @@ def parse_args():
                         default=False, dest="regenerate_repodata",
                         help="Whether to re-generate the "
                         "repodata for specified repositories")
-
-    if len(sys.argv) == 1:
-        parser.print_help()
-        sys.exit(0)
-    args = parser.parse_args()
-    if args.verbose:
-        logging.basicConfig(level=logging.DEBUG)
-
-    if len(args.triplets) == 0:
-        logging.error("No repository triplet provided!")
-        sys.exit(1)
-    if len(args.triplets) % 3 != 0:
-        logging.error("Number of positional arguments should be devided by "
-                      "3")
-        sys.exit(1)
-    else:
-        logging.debug("Triplets before parsing: {0}".format(args.triplets))
-        args.triplets = convert_list_to_sequential_tuples(args.triplets, 3)
-        logging.debug("Triplets after parsing: {0}".format(args.triplets))
-
-    if args.arch is None:
-        logging.error("Please, specify architecture")
-        parser.print_help()
-        sys.exit(1)
-
-    if args.kickstart_file is None:
-        logging.error("Kickstart file is not set!")
-        parser.print_help()
-        sys.exit(1)
-
-    if args.outdir is None:
-        logging.debug("Output directory is not set, so setting it to current "
-                      "directory.")
-        args.outdir = os.getcwd()
-    args.forward = split_names_list(args.forward)
-    args.backward = split_names_list(args.backward)
-    args.single = split_names_list(args.single)
-    args.exclude = split_names_list(args.exclude)
-
+    parser.add_argument("-g", "--greedy", action="store_true",
+                        default=False, dest="greedy", help="Greedy mode: get"
+                        " as much packages from marked repository as "
+                        "possible, and get others from non-marked "
+                        "repository.")
+    args = run_parser(parser)
     return args
 
 
@@ -457,9 +481,18 @@ def process_repository_triplet(triplet, dependency_builder, args):
                                                    args.arch)
     marked_graph = marked_graphs[0]
 
-    marked_packages = build_package_set(graph, back_graph, args.forward,
-                                        args.backward, args.single,
-                                        args.exclude)
+    if args.greedy:
+        marked_packages = Set(marked_graph.vs["name"])
+        for package in marked_packages:
+            logging.debug("Package {0} is marked".format(package))
+        for package in graph.vs["name"]:
+            if package not in marked_packages:
+                logging.debug("!!! Package {0} is NOT marked "
+                              "!!!".format(package))
+    else:
+        marked_packages = build_package_set(graph, back_graph, args.forward,
+                                            args.backward, args.single,
+                                            args.exclude)
     groups, patterns = find_groups_and_patterns(repository_path)
     combined_repository_path = construct_combined_repository(graph,
                                                              marked_graph,
