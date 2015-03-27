@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 import os
 import shutil
+import errno
 import argparse
 import sys
 import glob
@@ -513,8 +514,35 @@ def regenerate_repodata(repository_path):
     construct_repodata(repository_path, groups, patterns)
 
 
+def check_command_exists(command):
+    """
+    Checks whether the command exists in the given PATH evironment and exits
+    the program in the case of failure.
+
+    @param command  The command.
+
+    """
+    logging.debug("Checking command \"{0}\"".format(command))
+    try:
+        DEV_NULL = open(os.devnull, 'w')
+        subprocess.call([command], stdout=DEV_NULL, stderr=DEV_NULL)
+    except OSError as error:
+        if error.errno == errno.ENOENT:
+            logging.error("\"{0}\" command is not available. Try to "
+                          "install it!".format(command))
+        else:
+            logging.error("Unknown error happened during checking the "
+                          "command \"{0}\"!".format(command))
+        sys.exit(1)
+
+
 if __name__ == '__main__':
     args = parse_args()
+
+    # These commands will be called in subprocesses, so we need to be sure
+    # that they exist in the current environment:
+    for command in ["mic", "createrepo", "modifyrepo", "sudo", "ls"]:
+        check_command_exists(command)
 
     if args.regenerate_repodata:
         for triplet in args.triplets:
