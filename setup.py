@@ -9,4 +9,5 @@ setup(name='combi-repo',
       install_requires=['argparse',
                         'iniparse',
                         'python-igraph'],
-      requires=['yum', 'mic'])
+      requires=['yum', 'mic'],
+      scripts=['combi-repo.py'])
