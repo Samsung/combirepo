@@ -536,6 +536,40 @@ def check_command_exists(command):
         sys.exit(1)
 
 
+def check_repository_names(names, kickstart_file_path):
+    """
+    Checks whether all names specified by user exist in the given kickstart
+    file.
+
+    @param names                The list of names specified by user.
+    @param kickstart_file_path  The kickstart file.
+    """
+    try:
+        kickstart_file = open(kickstart_file_path, "r")
+    except IOError:
+        logging.error("Failed to open file {0}".format(kickstart_file_path))
+        sys.exit(1)
+
+    possible_names = []
+    for line in kickstart_file:
+        if line.startswith("repo "):
+            possible_names.extend(re.findall(r"--name=(\S+)", line))
+
+    if_error = False
+    for name in names:
+        if name not in possible_names:
+            logging.error("Failed to find repository name "
+                          "{0} in kickstart "
+                          "file {1} specified "
+                          "by user.".format(name, kickstart_file_path))
+            logging.error("Possible names are: {0}".format(possible_names))
+            if_error = True
+
+    kickstart_file.close()
+    if if_error:
+        sys.exit(1)
+
+
 if __name__ == '__main__':
     args = parse_args()
 
@@ -543,6 +577,10 @@ if __name__ == '__main__':
     # that they exist in the current environment:
     for command in ["mic", "createrepo", "modifyrepo", "sudo", "ls"]:
         check_command_exists(command)
+
+    # Check that user has given correct arguments for repository names:
+    check_repository_names([triplet[0] for triplet in args.triplets],
+                           args.kickstart_file)
 
     if args.regenerate_repodata:
         for triplet in args.triplets:
