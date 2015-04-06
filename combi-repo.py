@@ -111,6 +111,12 @@ def run_parser(parser):
     args.backward = split_names_list(args.backward)
     args.single = split_names_list(args.single)
     args.exclude = split_names_list(args.exclude)
+
+    if args.mic_options is not None:
+        splitted_options = []
+        for option in args.mic_options:
+            splitted_options.extend(re.split("[\ \n\t]", option))
+        args.mic_options = splitted_options
     return args
 
 
@@ -176,6 +182,8 @@ def parse_args():
                         " as much packages from marked repository as "
                         "possible, and get others from non-marked "
                         "repository.")
+    parser.add_argument("-M", "--mic-options", action="append", type=str,
+                        dest="mic_options", help="Additional options for MIC.")
     args = run_parser(parser)
     return args
 
@@ -398,7 +406,7 @@ def construct_combined_repository(graph, marked_graph, marked_packages,
 
 
 def create_image(arch, repository_names, repository_paths, kickstart_file_path,
-                 output_directory_path):
+                 output_directory_path, mic_options):
     """
     Creates an image using MIC tool, from given repository and given kickstart
     file. It creates a copy of kickstart file and replaces "repo" to given
@@ -409,6 +417,7 @@ def create_image(arch, repository_names, repository_paths, kickstart_file_path,
     @param repository_paths         The repository paths
     @param kickstart_file           The kickstart file to be used
     @param output_directory_path    The path to the output directory
+    @param mic_options              Additional options for MIC.
     """
     modified_kickstart_file_path = temporaries.create_temporary_file("mod.ks")
     kickstart_file = open(kickstart_file_path, "r")
@@ -432,6 +441,8 @@ def create_image(arch, repository_names, repository_paths, kickstart_file_path,
     mic_command = ["sudo", "mic", "create", "loop",
                    modified_kickstart_file_path, "-A", arch, "-o",
                    output_directory_path, "--tmpfs"]
+    if mic_options is not None:
+        mic_command.extend(mic_options)
     logging.debug("mic command: {0}".format(mic_command))
     subprocess.call(mic_command)
 
@@ -622,7 +633,7 @@ if __name__ == '__main__':
     for package in specified_packages:
         if package not in marked_packages_total:
             raise Exception("Failed to find package with name \"{0}\" in any"
-                            " of non-marked repositories")
+                            " of non-marked repositories".format(package))
 
     create_image(args.arch, repository_names, combined_repository_paths,
-                 args.kickstart_file, args.outdir)
+                 args.kickstart_file, args.outdir, args.mic_options)
