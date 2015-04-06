@@ -69,6 +69,8 @@ def run_parser(parser):
     args = parser.parse_args()
     if args.verbose:
         logging.basicConfig(level=logging.DEBUG)
+    else:
+        logging.basicConfig(level=logging.INFO)
 
     if len(args.triplets) == 0:
         logging.error("No repository triplet provided!")
@@ -187,9 +189,13 @@ def build_forward_dependencies(graph, package):
 
     @return             The set of forward dependencies + package itself
     """
-    dependencies = Set()
     source = graph.get_name_id(package)
     logging.debug("Found id = {0} for package {1}".format(source, package))
+    if source is None:
+        logging.debug("Failed to find package {0} in dependency "
+                      "tree.".format(package))
+        return Set()
+    dependencies = Set()
     for vertex in graph.bfsiter(source):
         dependency = graph.vs[vertex.index]["name"]
         logging.debug("Processing vertex {0}, its name is "
@@ -222,10 +228,12 @@ def build_package_set(graph, back_graph, forward, backward, single, exclude):
             marked = marked | build_forward_dependencies(back_graph, package)
     if isinstance(single, list):
         for package in single:
-            marked = marked | Set([package])
+            if not graph.get_name_id(package) is None:
+                marked = marked | Set([package])
     if isinstance(exclude, list):
         for package in exclude:
-            marked = marked - Set([package])
+            if not graph.get_name_id(package) is None:
+                marked = marked - Set([package])
 
     for package in marked:
         logging.debug("Package {0} is marked".format(package))
@@ -457,7 +465,8 @@ def process_repository_triplet(triplet, dependency_builder, args):
 
     @return                     Path to combined repository.
     """
-
+    repository_name = triplet[0]
+    logging.info("Processing repository \"{0}\"".format(repository_name))
     repository_path = triplet[1]
     if not os.path.isdir(repository_path):
         logging.error("Repository {0} does not "
@@ -501,7 +510,7 @@ def process_repository_triplet(triplet, dependency_builder, args):
                                                              args.mirror,
                                                              groups,
                                                              patterns)
-    return combined_repository_path
+    return combined_repository_path, marked_packages
 
 
 def regenerate_repodata(repository_path):
@@ -591,10 +600,28 @@ if __name__ == '__main__':
 
     combined_repository_paths = []
     repository_names = []
+    marked_packages_total = Set()
     for triplet in args.triplets:
-        path = process_repository_triplet(triplet, dependency_builder, args)
+        path, marked_packages = process_repository_triplet(triplet,
+                                                           dependency_builder,
+                                                           args)
+        marked_packages_total = marked_packages_total | marked_packages
         combined_repository_paths.append(path)
         repository_names.append(triplet[0])
+
+    specified_packages = []
+    if args.forward is not None:
+        specified_packages.extend(args.forward)
+    if args.backward is not None:
+        specified_packages.extend(args.backward)
+    if args.single is not None:
+        specified_packages.extend(args.single)
+    if args.exclude is not None:
+        specified_packages.extend(args.exclude)
+    for package in specified_packages:
+        if package not in marked_packages_total:
+            raise Exception("Failed to find package with name \"{0}\" in any"
+                            " of non-marked repositories")
 
     create_image(args.arch, repository_names, combined_repository_paths,
                  args.kickstart_file, args.outdir)
