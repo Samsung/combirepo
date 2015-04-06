@@ -384,7 +384,8 @@ def construct_combined_repository(graph, marked_graph, marked_packages,
     packages = Set(graph.vs["name"])
     for package in packages:
         if package in marked_packages:
-            continue
+            if package not in packages_not_found:
+                continue
         package_id = graph.get_name_id(package)
         location_from = graph.vs[package_id]["location"]
         create_symlink(package, location_from, repository_path)
