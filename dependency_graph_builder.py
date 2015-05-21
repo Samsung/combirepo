@@ -7,6 +7,7 @@ import re
 from iniparse import ConfigParser
 import yum
 import cStringIO
+from sets import Set
 import igraph
 import temporaries
 
@@ -23,6 +24,8 @@ class DependencyGraph(igraph.Graph):
         """
         super(DependencyGraph, self).__init__(directed=True)
         self.id_names = {}
+        self.provided_symbols = Set()
+        self.unprovided_symbols = Set()
 
     def set_name_id(self, name, id_):
         """
@@ -80,6 +83,8 @@ def _search_dependencies(yum_sack, package, providers):
     # Hash of already built dependencies.
     # FIXME: This hash is used just as a set, not as a hash.
     dependencies = {}
+    provided_symbols = Set()
+    unprovided_symbols = Set()
 
     for requirement in package.returnPrco('requires'):
         requirement_name = requirement[0]
@@ -96,18 +101,22 @@ def _search_dependencies(yum_sack, package, providers):
             provider = yum_sack.searchProvides(requirement_name)
 
             if not provider:
-                logging.error("Nothing provides {0} required by {1}".
-                              format(requirement_name, package.name))
+                element = Set([requirement_name])
+                unprovided_symbols = unprovided_symbols | element
                 continue
             else:
+                element = Set([requirement_name])
+                provided_symbols = provided_symbols | element
                 if len(provider) != 1:
-                    logging.error("Have choice for {0}:".
-                                  format(requirement_name))
+                    logging.warning("Have choice for {0}:".
+                                    format(requirement_name))
                     for p in provider:
-                        logging.error(" * {0}".format(p))
+                        logging.warning(" * {0}".format(p))
                         # FIXME: In case if we want save have-choice
                         # information in the resulting graph, we need to
                         # modify this behaviour
+                    logging.warning("... {0} will be "
+                                    "used!".format(provider[0]))
                 provider = provider[0].name
 
         providers[requirement_name] = provider
@@ -119,7 +128,7 @@ def _search_dependencies(yum_sack, package, providers):
         else:
             dependencies[provider] = None
 
-    return dependencies.keys()
+    return dependencies.keys(), provided_symbols, unprovided_symbols
 
 
 class DependencyGraphBuilder():
@@ -328,7 +337,15 @@ class DependencyGraphBuilder():
         edges = []
         back_edges = []
         for package in yum_sack.returnPackages():
-            dependencies = _search_dependencies(yum_sack, package, providers)
+            result = _search_dependencies(yum_sack, package, providers)
+            dependencies = result[0]
+            provided = result[1]
+            unprovided = result[2]
+
+            provided = dependency_graph.provided_symbols | provided
+            unprovided = dependency_graph.unprovided_symbols | unprovided
+            dependency_graph.provided_symbols = provided
+            dependency_graph.unprovided_symbols = unprovided
 
             for dependency in dependencies:
                 id_begin = dependency_graph.get_name_id(package.name)
