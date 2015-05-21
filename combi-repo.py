@@ -387,7 +387,9 @@ def construct_combined_repository(graph, marked_graph, marked_packages,
                           "repository".format(package))
         if not if_mirror:
             raise Exception("The above listed packages were not found in "
-                            "marked repository")
+                            "marked repository.\n"
+                            "HINT: use option -m to use non-marked packages "
+                            "instead of them.")
 
     packages = Set(graph.vs["name"])
     for package in packages:
@@ -466,6 +468,43 @@ def find_groups_and_patterns(repository_path):
     return groups, patterns
 
 
+def inform_about_unprovided(provided_symbols, unprovided_symbols,
+                            marked_provided_symbols,
+                            marked_unprovided_symbols):
+    """
+    Informs the user when any repository contains symbols that are not provided
+    with any of them.
+
+    @param provided_symbols             Symbols provided with non-marked
+                                        repository
+    @param unprovided_symbols           Symbols unprovided with non-marked
+                                        repository
+    @param marked_provided_symbols      Symbols provided with marked
+                                        repository
+    @param marked_unprovided_symbols    Symbols unprovided with marked
+                                        repository
+    """
+    logging.debug("non-marked unprovided symbols: "
+                  "{0}".format(unprovided_symbols))
+    logging.debug("marked unprovided symbols: "
+                  "{0}".format(marked_unprovided_symbols))
+    lacking_symbols = unprovided_symbols - marked_provided_symbols
+    marked_lacking_symbols = marked_unprovided_symbols - provided_symbols
+    common_lacking_symbols = lacking_symbols & marked_lacking_symbols
+    lacking_symbols = lacking_symbols - common_lacking_symbols
+    marked_lacking_symbols = marked_lacking_symbols - common_lacking_symbols
+
+    for symbol in common_lacking_symbols:
+        logging.warning("Some packages in both repositories require symbol"
+                        " {0}, but none of them provides it.".format(symbol))
+    for symbol in lacking_symbols:
+        logging.warning("Some packages in non-marked repository require symbol"
+                        " {0}, but none of them provides it.".format(symbol))
+    for symbol in marked_lacking_symbols:
+        logging.warning("Some packages in marked repository require symbol"
+                        " {0}, but none of them provides it.".format(symbol))
+
+
 def process_repository_triplet(triplet, dependency_builder, args):
     """
     Processes one repository triplet and constructs combined repository for
@@ -502,7 +541,9 @@ def process_repository_triplet(triplet, dependency_builder, args):
     marked_graphs = dependency_builder.build_graph(marked_repository_path,
                                                    args.arch)
     marked_graph = marked_graphs[0]
-
+    inform_about_unprovided(graph.provided_symbols, graph.unprovided_symbols,
+                            marked_graph.provided_symbols,
+                            marked_graph.unprovided_symbols)
     if args.greedy:
         marked_packages = Set(marked_graph.vs["name"])
         for package in marked_packages:
