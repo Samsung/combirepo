@@ -183,7 +183,14 @@ def parse_args():
                         "possible, and get others from non-marked "
                         "repository.")
     parser.add_argument("-M", "--mic-options", action="append", type=str,
-                        dest="mic_options", help="Additional options for MIC.")
+                        dest="mic_options", help="Additional options for MIC."
+                        "\nBy default the following options are set:"
+                        "\n \"sudo mic create loop <YOUR KICKSTART FILE> "
+                        "\n -A <THE SPECIFIED ARCHITECTURE> "
+                        "\n -o <THE SPECIFIED OUTPUT DIRECTORY>"
+                        "\n --tmpfs \n --pkgmgr=yum\""
+                        "\n     . You can append options to add new or change "
+                        "old ones.")
     args = run_parser(parser)
     return args
 
@@ -244,7 +251,7 @@ def build_package_set(graph, back_graph, forward, backward, single, exclude):
                 marked = marked - Set([package])
 
     for package in marked:
-        logging.debug("Package {0} is marked".format(package))
+        logging.info("Package {0} is marked".format(package))
 
     return marked
 
@@ -442,7 +449,7 @@ def create_image(arch, repository_names, repository_paths, kickstart_file_path,
     # Now create the image using the "mic" tool:
     mic_command = ["sudo", "mic", "create", "loop",
                    modified_kickstart_file_path, "-A", arch, "-o",
-                   output_directory_path, "--tmpfs"]
+                   output_directory_path, "--tmpfs", "--pkgmgr=yum"]
     if mic_options is not None:
         mic_command.extend(mic_options)
     logging.debug("mic command: {0}".format(mic_command))
