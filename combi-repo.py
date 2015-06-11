@@ -380,6 +380,16 @@ def construct_combined_repository(graph, marked_graph, marked_packages,
     """
     repository_path = temporaries.create_temporary_directory("combi-repo")
     packages_not_found = []
+
+    # FIXME: Should it be done here?
+    if_marked_repo_contains_libasan = False
+    for symbol in marked_graph.provided_symbols:
+        if "libasan" in symbol:
+            if_marked_repo_contains_libasan = True
+            break
+    if if_marked_repo_contains_libasan:
+        marked_packages = marked_packages | Set(["libasan"])
+
     for package in marked_packages:
         package_id = marked_graph.get_name_id(package)
         if package_id is None:
@@ -442,7 +452,12 @@ def create_image(arch, repository_names, repository_paths, kickstart_file_path,
                                   line)
                     logging.debug("Writting the following line to kickstart "
                                   "file: \n{0}".format(line))
-        modified_kickstart_file.write(line)
+            modified_kickstart_file.write(line)
+        elif line.startswith("%packages"):
+            modified_kickstart_file.write(line)
+            modified_kickstart_file.write("libasan")
+        else:
+            modified_kickstart_file.write(line)
     kickstart_file.close()
     modified_kickstart_file.close()
 
