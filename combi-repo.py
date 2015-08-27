@@ -188,7 +188,7 @@ def parse_args():
                         "\n \"sudo mic create loop <YOUR KICKSTART FILE> "
                         "\n -A <THE SPECIFIED ARCHITECTURE> "
                         "\n -o <THE SPECIFIED OUTPUT DIRECTORY>"
-                        "\n --tmpfs \n --pkgmgr=yum\""
+                        "\n --tmpfs \n --pkgmgr=zypp \n --shrink\""
                         "\n     . You can append options to add new or change "
                         "old ones.")
     args = run_parser(parser)
@@ -464,7 +464,8 @@ def create_image(arch, repository_names, repository_paths, kickstart_file_path,
     # Now create the image using the "mic" tool:
     mic_command = ["sudo", "mic", "create", "loop",
                    modified_kickstart_file_path, "-A", arch, "-o",
-                   output_directory_path, "--tmpfs", "--pkgmgr=yum"]
+                   output_directory_path, "--tmpfs", "--pkgmgr=zypp",
+                   "--shrink"]
     if mic_options is not None:
         mic_command.extend(mic_options)
     logging.debug("mic command: {0}".format(mic_command))
