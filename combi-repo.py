@@ -589,14 +589,76 @@ def process_repository_triplet(triplet, dependency_builder, args):
     return combined_repository_path, marked_packages
 
 
-def regenerate_repodata(repository_path):
+def extract_package_groups_package(repository_path):
+    """
+    Searches for group.xml and patterns.xml in the package-groups-*.rpm
+    package in the given repository (if exists) and returns them.
+
+    @param repository_path  The path to the repository.
+    """
+    package_groups_package = None
+    for root, dirs, files in os.walk(repository_path):
+        for file_name in files:
+            if file_name.startswith("package-groups"):
+                package_groups_package = os.path.join(root, file_name)
+    if package_groups_package is None:
+        return None, None
+
+    package_groups_package = os.path.abspath(package_groups_package)
+    directory_unpacking = temporaries.create_temporary_directory("groups")
+    initial_directory = os.getcwd()
+    os.chdir(directory_unpacking)
+    groups = None
+    patterns = None
+    num_groups_files = 0
+    num_patterns_files = 0
+    subprocess.call(["unrpm", package_groups_package])
+    for root, dirs, files in os.walk(directory_unpacking):
+        for file_name in files:
+            if file_name.endswith("group.xml"):
+                groups = os.path.join(root, file_name)
+                num_groups_files = num_groups_files + 1
+            if file_name.endswith("patterns.xml"):
+                patterns = os.path.join(root, file_name)
+                num_patterns_files = num_patterns_files + 1
+    if num_groups_files > 1:
+        raise Exception("Found multiple group.xml files in {0}".format(
+                        package_groups_package))
+    if num_patterns_files > 1:
+        raise Exception("Found multiple patterns.xml files in {0}".format(
+                        num_patterns_files))
+    os.chdir(initial_directory)
+    return groups, patterns
+
+
+def regenerate_repodata(repository_path, marked_repository_path):
     """
     Re-generates the repodata for the given repository.
 
     @param repository_path  The path to the repository.
+
+    Uses group.xml and patterns.xml from any path inside repository, if these
+    files don't exist they're unpacked from package-groups.rpm
     """
     groups, patterns = find_groups_and_patterns(repository_path)
+
+    if groups is None or patterns is None:
+        groups, patterns = extract_package_groups_package(repository_path)
+    else:
+        logging.warning("The repository {0} contains files {1} and {2}! They "
+                        "will be used as groups and patterns "
+                        "files!".format(repository_path, groups, patterns))
+
+    if groups is None or patterns is None:
+        logging.warning("There is no group.xml, patterns.xml and valid "
+                        "package-groups rpm in the repository! The repository "
+                        "will be generated without groups and patterns files!")
+    else:
+        groups = os.path.abspath(groups)
+        patterns = os.path.abspath(patterns)
+
     construct_repodata(repository_path, groups, patterns)
+    construct_repodata(marked_repository_path, groups, patterns)
 
 
 def check_command_exists(command):
@@ -660,7 +722,7 @@ if __name__ == '__main__':
 
     # These commands will be called in subprocesses, so we need to be sure
     # that they exist in the current environment:
-    for command in ["mic", "createrepo", "modifyrepo", "sudo", "ls"]:
+    for command in ["mic", "createrepo", "modifyrepo", "sudo", "ls", "unrpm"]:
         check_command_exists(command)
 
     # Check that user has given correct arguments for repository names:
@@ -669,8 +731,7 @@ if __name__ == '__main__':
 
     if args.regenerate_repodata:
         for triplet in args.triplets:
-            regenerate_repodata(triplet[1])
-            regenerate_repodata(triplet[2])
+            regenerate_repodata(triplet[1], triplet[2])
 
     dependency_builder = DependencyGraphBuilder()
 
