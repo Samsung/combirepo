@@ -264,7 +264,8 @@ class DependencyGraphBuilder():
         # repository is not accessible. That's why we mannualy search files in
         # the repository.
 
-        file_name = "{0}.rpm".format(_get_full_package_name(package))
+        package_name = _get_full_package_name(package)
+        file_name = "{0}.rpm".format(package_name)
 
         # Workaround for the bug when YUM returns "1:coreutils-6.9-10.2.armv7l"
         # as package name
@@ -287,8 +288,10 @@ class DependencyGraphBuilder():
 
         location = None
         for root, dirs, files in os.walk(self.repository_path):
-            if file_name in files:
-                location = os.path.join(self.repository_path, file_name)
+            for existing_file_name in files:
+                if package_name in existing_file_name:
+                    location = os.path.join(self.repository_path,
+                                            existing_file_name)
 
         if location is None:
             raise Exception("Failed to find package {0}!".format(package))
@@ -325,6 +328,10 @@ class DependencyGraphBuilder():
             full_name = _get_full_package_name(package)
             full_names.append(full_name)
             location = self.__find_package_location(package)
+            # We should not include "dontuse" rpms to index at all, so delete
+            # it from there:
+            if "dontuse.rpm" in location:
+                yum_sack.delPackage(package)
             locations.append(location)
             i = i + 1
         dependency_graph.vs["name"] = names
