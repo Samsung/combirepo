@@ -68,7 +68,48 @@ def _get_full_package_name(package):
     return file_name
 
 
-def _search_dependencies(yum_sack, package, providers):
+def _handle_have_choice_problem(requirement, providers, preferables):
+    """
+    Processes the provider in case of "have choice" problem.
+
+    @param requirement  The name of required symbol.
+    @param providers    The list of providers.
+    @param preferables  The list of prefered package names.
+
+    @return             The name of package to be used.
+    """
+    provider = None
+    logging.warning("Have choice for symbol {0}:".
+                    format(requirement))
+    preferred_alternatives = []
+    for alternative in providers:
+        logging.warning(" * {0}".format(alternative))
+        if alternative.name in preferables:
+            preferred_alternatives.append(alternative.name)
+
+    if len(preferred_alternatives) == 1:
+        provider = preferred_alternatives[0]
+        logging.warning("Package {0} is specified as preferable and will be "
+                        "used to resolve this choice.".format(provider))
+
+    elif len(preferred_alternatives) < 1:
+        logging.error("Please specify which of alternative "
+                      "packages should be used. Use option "
+                      "\"-p\" for that.")
+        sys.exit("\"Have choice\" error!")
+
+    elif len(preferred_alternatives) > 1:
+        logging.error("All of the following packages are "
+                      "specified as preferrable:")
+        for alternative in preferred_alternatives:
+            logging.error(" * {0}".format(alternative))
+        logging.error("Please specify only one of them.")
+        sys.exit("Too many preferables!")
+
+    return provider
+
+
+def _search_dependencies(yum_sack, package, providers, preferables):
     """
     Searches the dependencies of the given package in the repository
 
@@ -108,16 +149,11 @@ def _search_dependencies(yum_sack, package, providers):
                 element = Set([requirement_name])
                 provided_symbols = provided_symbols | element
                 if len(provider) != 1:
-                    logging.warning("Have choice for {0}:".
-                                    format(requirement_name))
-                    for p in provider:
-                        logging.warning(" * {0}".format(p))
-                        # FIXME: In case if we want save have-choice
-                        # information in the resulting graph, we need to
-                        # modify this behaviour
-                    logging.warning("... {0} will be "
-                                    "used!".format(provider[0]))
-                provider = provider[0].name
+                    provider = _handle_have_choice_problem(requirement_name,
+                                                           provider,
+                                                           preferables)
+                else:
+                    provider = provider[0].name
 
         providers[requirement_name] = provider
 
@@ -143,17 +179,21 @@ class DependencyGraphBuilder():
         """
         self.repository_path = None
         self.arch = None
+        self.preferables = []
         logging.debug("Initializing dependency graph builder...")
 
-    def build_graph(self, repository_path, arch):
+    def build_graph(self, repository_path, arch, preferables):
         """
         Builds the dependency graph of the given repository.
 
         @param repository_path  The path to the repository
         @param arch             The architecture to be analyzed
+        @param preferables      The list of package names that should be
+                                prefered in case of "have choice" problem
 
         @return The dependency graph in the form of hash.
         """
+        self.preferables.extend(preferables)
         # If the relative path is given, transform it to the absolute path,
         # because it will be written to the config file.
         repository_path = os.path.abspath(repository_path)
@@ -344,7 +384,8 @@ class DependencyGraphBuilder():
         edges = []
         back_edges = []
         for package in yum_sack.returnPackages():
-            result = _search_dependencies(yum_sack, package, providers)
+            result = _search_dependencies(yum_sack, package, providers,
+                                          self.preferables)
             dependencies = result[0]
             provided = result[1]
             unprovided = result[2]

@@ -117,6 +117,9 @@ def run_parser(parser):
         for option in args.mic_options:
             splitted_options.extend(re.split("[\ \n\t]", option))
         args.mic_options = splitted_options
+
+    if args.preferables is None:
+        args.preferables = []
     return args
 
 
@@ -191,6 +194,9 @@ def parse_args():
                         "\n --tmpfs \n --pkgmgr=zypp \n --shrink\""
                         "\n     . You can append options to add new or change "
                         "old ones.")
+    parser.add_argument("-p", "--prefer", action="append", type=str,
+                        dest="preferables", help="Package names that should "
+                        "be prefered in case of \"have choice\" problem.")
     args = run_parser(parser)
     return args
 
@@ -553,7 +559,8 @@ def process_repository_triplet(triplet, dependency_builder, args):
         sys.exit(1)
 
     graph, back_graph = dependency_builder.build_graph(repository_path,
-                                                       args.arch)
+                                                       args.arch,
+                                                       args.preferables)
     # Generally speaking, sets of packages in non-marked and marked
     # repositories can differ. That's why we need to build graphs also for
     # marked repository.
@@ -562,7 +569,8 @@ def process_repository_triplet(triplet, dependency_builder, args):
     # FIXME: If it's not true in some pratical cases, then the special
     # treatment is needed.
     marked_graphs = dependency_builder.build_graph(marked_repository_path,
-                                                   args.arch)
+                                                   args.arch,
+                                                   args.preferables)
     marked_graph = marked_graphs[0]
     inform_about_unprovided(graph.provided_symbols, graph.unprovided_symbols,
                             marked_graph.provided_symbols,
