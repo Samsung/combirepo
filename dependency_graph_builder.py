@@ -64,17 +64,118 @@ def _get_full_package_name(package):
     output.write("{0}".format(package))
     file_name = str(output.getvalue())
     output.close()
+    # Workaround for the bug when YUM returns "1:coreutils-6.9-10.2.armv7l"
+    # as package name
+    file_name = re.sub(r'[0-9]*:(.*)', r'\1', file_name)
 
     return file_name
 
 
-def _handle_have_choice_problem(requirement, providers, preferables):
+def _get_package_version_release(package):
+    """
+    Gets the quadruple of version + release of package.
+
+    @param package  The package.
+    """
+    result = []
+    version = package.version.split(".")
+    logging.debug("  version: {0}".format(version))
+    result.extend(version)
+    release = package.release.split(".")
+    logging.debug("  release: {0}".format(release))
+    result.extend(release)
+    return result
+
+
+def _check_names_are_equal(packages):
+    """
+    Checks whether the names of packages are equal, otherwise aborts the
+    program.
+
+    @param packages The list of packages.
+    """
+    short_names = Set()
+    for package in packages:
+        short_names = short_names | Set([package.name])
+
+    if len(short_names) > 1:
+        logging.error("Cannot select extreme package, because there are "
+                      "several different with different names:")
+        for package in packages:
+            full_name = _get_full_package_name(package)
+            logging.error(" * {0}".format(full_name))
+        logging.error("Please, specify only one of them using option \"-p\"")
+        sys.exit("Error.")
+
+
+def _get_extreme_package(packages, strategy):
+    """
+    Gets the extreme package (with given strategy).
+
+    @param package  The package.
+    @param strategy The strategy.
+    """
+    _check_names_are_equal(packages)
+    small = None
+    small_numbers = _get_package_version_release(packages[0])
+    big = None
+    big_numbers = _get_package_version_release(packages[0])
+    default_length = len(small_numbers)
+
+    for package in packages:
+        numbers = _get_package_version_release(package)
+        if (len(numbers) != default_length):
+            logging.error("Package versions are incomparable.")
+            logging.error("Please, specify only one of them using "
+                          "option \"-p\"")
+            sys.exit("Error.")
+        if_smaller = True
+        for i in range(len(numbers)):
+            if numbers[i] < small_numbers[i]:
+                if_smaller = True
+                break
+            if numbers[i] > small_numbers[i]:
+                if_smaller = False
+                break
+        if if_smaller:
+            small = package
+            small_numbers = numbers
+
+        if_bigger = True
+        for i in range(len(numbers)):
+            if numbers[i] < big_numbers[i]:
+                if_bigger = False
+                break
+            if numbers[i] > big_numbers[i]:
+                if_bigger = True
+                break
+        if if_bigger:
+            big = package
+            big_numbers = numbers
+
+    provider = None
+    if strategy == "small":
+        provider = small
+        logging.warning("Package {0} was preferred, because its numbers are "
+                        "the smallest".format(provider))
+    elif strategy == "big":
+        provider = big
+        logging.warning("Package {0} was preferred, because its numbers are "
+                        "the biggest".format(provider))
+    else:
+        logging.error("Unknown strategy: {0}".format(strategy))
+        sys.exit("Error.")
+    return provider
+
+
+def _handle_have_choice_problem(requirement, providers, preferables, strategy):
     """
     Processes the provider in case of "have choice" problem.
 
     @param requirement  The name of required symbol.
     @param providers    The list of providers.
     @param preferables  The list of prefered package names.
+    @param strategy     The strategy for the case of equal names.
 
     @return             The name of package to be used.
     """
@@ -82,40 +183,72 @@ def _handle_have_choice_problem(requirement, providers, preferables):
     logging.warning("Have choice for symbol {0}:".
                     format(requirement))
     preferred_alternatives = []
+    preferred_alternatives_exact = []
+    names = Set()
+    full_names = Set()
     for alternative in providers:
-        logging.warning(" * {0}".format(alternative))
+        full_name = _get_full_package_name(alternative)
+        logging.warning(" * {0}, version {1}, "
+                        "release {2}".format(full_name, alternative.version,
+                                             alternative.release))
         if alternative.name in preferables:
-            preferred_alternatives.append(alternative.name)
+            preferred_alternatives.append(alternative)
+        if full_name in preferables:
+            preferred_alternatives_exact.append(alternative)
+        names = names | Set([alternative.name])
+        full_names = full_names | Set([full_name])
 
-    if len(preferred_alternatives) == 1:
-        provider = preferred_alternatives[0]
-        logging.warning("Package {0} is specified as preferable and will be "
-                        "used to resolve this choice.".format(provider))
+    if len(preferred_alternatives_exact) == 1:
+        provider = preferred_alternatives_exact[0].name
+        full_name = _get_full_package_name(provider)
+        logging.warning("Package full name {0} is specified as preferable "
+                        "and will be used to resolve this "
+                        "choice.".format(full_name))
+    elif len(preferred_alternatives) == 1:
+        provider = preferred_alternatives[0].name
+        logging.warning("Package name {0} is specified as preferable "
+                        "and will be used to resolve this "
+                        "choice.".format(provider))
+    else:
+        if len(preferred_alternatives_exact) > 1:
+            logging.warning("All of the following packages are "
+                            "specified as preferable:")
+            for alternative in preferred_alternatives:
+                full_name = _get_full_package_name(alternative)
+                logging.warning(" * {0}".format(full_name))
+            providers = preferred_alternatives_exact
+        elif len(preferred_alternatives) > 1:
+            logging.warning("All of the following packages are "
+                            "specified as preferable:")
+            for alternative in preferred_alternatives:
+                logging.warning(" * {0}".format(alternative.name))
+            logging.warning("Please specify only one of them.")
+            providers = preferred_alternatives
+        if strategy is not None:
+            provider = _get_extreme_package(providers, strategy).name
+            return provider
 
-    elif len(preferred_alternatives) < 1:
-        logging.error("Please specify which of alternative "
-                      "packages should be used. Use option "
-                      "\"-p\" for that.")
+        logging.error("Please specify one and only one package "
+                      "from above listed alternatives that should be used. "
+                      "Use option \"-p\" for that.")
+        if len(names) != len(full_names):
+            logging.error("You should specify one and only one FULL name "
+                          "as argument.")
+        else:
+            logging.error("You should specify one and only one SHORT name "
+                          "as argument.")
         sys.exit("\"Have choice\" error!")
-
-    elif len(preferred_alternatives) > 1:
-        logging.error("All of the following packages are "
-                      "specified as preferrable:")
-        for alternative in preferred_alternatives:
-            logging.error(" * {0}".format(alternative))
-        logging.error("Please specify only one of them.")
-        sys.exit("Too many preferables!")
-
     return provider
 
 
-def _search_dependencies(yum_sack, package, providers, preferables):
+def _search_dependencies(yum_sack, package, providers, preferables, strategy):
     """
     Searches the dependencies of the given package in the repository
 
     @param yum_sack     The YUM sack used to search packages.
     @param package      The package which dependencies are searched.
-    @param providers    Cached RPM symbols providers
+    @param providers    Cached RPM symbols providers.
+    @param strategy     Have choice resolving strategy.
 
     @return             List of package names on which the given package
                         depends on
@@ -151,7 +284,8 @@ def _search_dependencies(yum_sack, package, providers, preferables):
                 if len(provider) != 1:
                     provider = _handle_have_choice_problem(requirement_name,
                                                            provider,
-                                                           preferables)
+                                                           preferables,
+                                                           strategy)
                 else:
                     provider = provider[0].name
 
@@ -180,9 +314,10 @@ class DependencyGraphBuilder():
         self.repository_path = None
         self.arch = None
         self.preferables = []
+        self.strategy = None
         logging.debug("Initializing dependency graph builder...")
 
-    def build_graph(self, repository_path, arch, preferables):
+    def build_graph(self, repository_path, arch, preferables, strategy):
         """
         Builds the dependency graph of the given repository.
 
@@ -194,6 +329,7 @@ class DependencyGraphBuilder():
         @return The dependency graph in the form of hash.
         """
         self.preferables.extend(preferables)
+        self.strategy = strategy
         # If the relative path is given, transform it to the absolute path,
         # because it will be written to the config file.
         repository_path = os.path.abspath(repository_path)
@@ -307,11 +443,6 @@ class DependencyGraphBuilder():
         package_name = _get_full_package_name(package)
         file_name = "{0}.rpm".format(package_name)
 
-        # Workaround for the bug when YUM returns "1:coreutils-6.9-10.2.armv7l"
-        # as package name
-        file_name = re.sub(r'[0-9]*:(.*)', r'\1', file_name)
-        logging.debug("Searching file {0}".format(file_name))
-
         # Check most probably paths to speed up the search.
         # This gives speed up from 10.760s to 0.711s of program run time.
         location = os.path.join(self.repository_path, self.arch, file_name)
@@ -385,7 +516,7 @@ class DependencyGraphBuilder():
         back_edges = []
         for package in yum_sack.returnPackages():
             result = _search_dependencies(yum_sack, package, providers,
-                                          self.preferables)
+                                          self.preferables, self.strategy)
             dependencies = result[0]
             provided = result[1]
             unprovided = result[2]

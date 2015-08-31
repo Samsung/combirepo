@@ -120,6 +120,11 @@ def run_parser(parser):
 
     if args.preferables is None:
         args.preferables = []
+    if args.preferring_strategy is not None:
+        if args.preferring_strategy not in ["small", "big"]:
+            logging.error("Unknown preferring strategy: "
+                          "{0}".format(args.preferring_strategy))
+            sys.exit("Error.")
     return args
 
 
@@ -197,6 +202,14 @@ def parse_args():
     parser.add_argument("-p", "--prefer", action="append", type=str,
                         dest="preferables", help="Package names that should "
                         "be prefered in case of \"have choice\" problem.")
+    parser.add_argument("-P", "--preferring-strategy", action="store",
+                        type=str, dest="preferring_strategy",
+                        help="Have choice "
+                        "resolving strategy for the case when there are "
+                        "packages with equal names but different "
+                        "versions/build numbers.Possible values: "
+                        "small (prefer smaller), "
+                        "big (prefer bigger).")
     args = run_parser(parser)
     return args
 
@@ -558,9 +571,11 @@ def process_repository_triplet(triplet, dependency_builder, args):
                       "exist!".format(marked_repository_path))
         sys.exit(1)
 
+    strategy = args.preferring_strategy
     graph, back_graph = dependency_builder.build_graph(repository_path,
                                                        args.arch,
-                                                       args.preferables)
+                                                       args.preferables,
+                                                       strategy)
     # Generally speaking, sets of packages in non-marked and marked
     # repositories can differ. That's why we need to build graphs also for
     # marked repository.
@@ -570,7 +585,8 @@ def process_repository_triplet(triplet, dependency_builder, args):
     # treatment is needed.
     marked_graphs = dependency_builder.build_graph(marked_repository_path,
                                                    args.arch,
-                                                   args.preferables)
+                                                   args.preferables,
+                                                   strategy)
     marked_graph = marked_graphs[0]
     inform_about_unprovided(graph.provided_symbols, graph.unprovided_symbols,
                             marked_graph.provided_symbols,
