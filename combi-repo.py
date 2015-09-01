@@ -14,6 +14,31 @@ from dependency_graph_builder import DependencyGraphBuilder
 import temporaries
 
 
+def call_hidden_subprocess(commandline):
+    """
+    Calls the subprocess and hides all its output.
+
+    @param commandline  The list of command-line words to be executed.
+
+    @return             The return code of the process
+    """
+    code = 0
+    if logging.getLogger().getEffectiveLevel() <= logging.DEBUG:
+        code = subprocess.call(commandline)
+    else:
+        logging.info("Running the command: {0}".format(" ".join(commandline)))
+        log_file_name = temporaries.create_temporary_file("process.log")
+        with open(log_file_name, 'w') as log_file:
+            code = subprocess.call(commandline, stdout=log_file,
+                                   stderr=log_file)
+        if code != 0:
+            logging.error("The subprocess failed!")
+            logging.error("STDERR output:")
+            with open(log_file_name, 'r') as log_file:
+                logging.error("{0}".format(log_file.read()))
+    return code
+
+
 def split_names_list(names):
     """
     Splits the given list of names to the list of names, as follows:
@@ -324,8 +349,8 @@ def workaround_repodata_open_checksum_bug(repodata_path):
         backup_group_file = temporaries.create_temporary_file("group.xml")
         shutil.copy(group_file, backup_group_file)
         backup_group_files.append((group_file, backup_group_file))
-        exit_value = subprocess.call(["modifyrepo", "--remove", group_file,
-                                     repodata_path])
+        exit_value = call_hidden_subprocess(["modifyrepo", "--remove",
+                                            group_file, repodata_path])
         if exit_value != 0:
             raise Exception("modifyrepo failed with exit value = "
                             "{0}".format(exit_value))
@@ -362,8 +387,7 @@ def construct_repodata(repository_path, groups, patterns):
         if groups != groups_local:
             shutil.copy(groups, groups_local)
         createrepo_command.extend(["-g", "repodata/group.xml"])
-    logging.debug("createrepo command: \n{0}".format(createrepo_command))
-    exit_value = subprocess.call(createrepo_command)
+    exit_value = call_hidden_subprocess(createrepo_command)
     if exit_value != 0:
         raise Exception("createrepo failed with exit value = "
                         "{0}".format(exit_value))
@@ -372,8 +396,8 @@ def construct_repodata(repository_path, groups, patterns):
         patterns_local = os.path.join(repodata_path, "patterns.xml")
         if patterns != patterns_local:
             shutil.copy(patterns, patterns_local)
-        exit_value = subprocess.call(["modifyrepo", patterns_local,
-                                     repodata_path])
+        exit_value = call_hidden_subprocess(["modifyrepo", patterns_local,
+                                            repodata_path])
         if exit_value != 0:
             raise Exception("modifyrepo failed with exit value = "
                             "{0}".format(exit_value))
@@ -437,7 +461,7 @@ def construct_combined_repository(graph, marked_graph, marked_packages,
         create_symlink(package, location_from, repository_path)
 
     if logging.getLogger().getEffectiveLevel() == logging.DEBUG:
-        subprocess.call(["ls", "-l", repository_path])
+        call_hidden_subprocess(["ls", "-l", repository_path])
 
     construct_repodata(repository_path, groups, patterns)
     return repository_path
@@ -487,7 +511,7 @@ def create_image(arch, repository_names, repository_paths, kickstart_file_path,
                    "--shrink"]
     if mic_options is not None:
         mic_command.extend(mic_options)
-    logging.debug("mic command: {0}".format(mic_command))
+    logging.debug("mic command: {0}".format(" ".join(mic_command)))
     subprocess.call(mic_command)
 
 
@@ -636,7 +660,7 @@ def extract_package_groups_package(repository_path):
     patterns = None
     num_groups_files = 0
     num_patterns_files = 0
-    subprocess.call(["unrpm", package_groups_package])
+    call_hidden_subprocess(["unrpm", package_groups_package])
     for root, dirs, files in os.walk(directory_unpacking):
         for file_name in files:
             if file_name.endswith("group.xml"):
