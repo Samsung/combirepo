@@ -193,6 +193,11 @@ def parse_args():
                         help="The name of package that should be excluded from"
                         " the final list of marked packages.")
 
+    parser.add_argument("-S", "--specific-package", type=str, action="append",
+                        dest="specific_packages", help="The name of package "
+                        "that is not installed to the image by default, but "
+                        "that must be installed in this build.")
+
     parser.add_argument("-v", "--verbose", action="store_true", dest="verbose",
                         default=False, help="Enable verbose mode")
     parser.add_argument("-A", "--arch", type=str, action="store",
@@ -263,7 +268,8 @@ def build_forward_dependencies(graph, package):
     return dependencies
 
 
-def build_package_set(graph, back_graph, forward, backward, single, exclude):
+def build_package_set(graph, back_graph, forward, backward, single, exclude,
+                      specific):
     """
     Builds the set of marked packages.
 
@@ -293,6 +299,10 @@ def build_package_set(graph, back_graph, forward, backward, single, exclude):
         for package in exclude:
             if not graph.get_name_id(package) is None:
                 marked = marked - Set([package])
+    if isinstance(specific, list):
+        for package in specific:
+            if not graph.get_name_id(package) is None:
+                marked = marked | Set([package])
 
     for package in marked:
         logging.info("Package {0} is marked".format(package))
@@ -424,15 +434,6 @@ def construct_combined_repository(graph, marked_graph, marked_packages,
     repository_path = temporaries.create_temporary_directory("combi-repo")
     packages_not_found = []
 
-    # FIXME: Should it be done here?
-    if_marked_repo_contains_libasan = False
-    for symbol in marked_graph.provided_symbols:
-        if "libasan" in symbol:
-            if_marked_repo_contains_libasan = True
-            break
-    if if_marked_repo_contains_libasan:
-        marked_packages = marked_packages | Set(["libasan"])
-
     for package in marked_packages:
         package_id = marked_graph.get_name_id(package)
         if package_id is None:
@@ -468,7 +469,8 @@ def construct_combined_repository(graph, marked_graph, marked_packages,
 
 
 def create_image(arch, repository_names, repository_paths, kickstart_file_path,
-                 output_directory_path, mic_options):
+                 output_directory_path, mic_options, specific_packages,
+                 logging_level):
     """
     Creates an image using MIC tool, from given repository and given kickstart
     file. It creates a copy of kickstart file and replaces "repo" to given
@@ -498,7 +500,8 @@ def create_image(arch, repository_names, repository_paths, kickstart_file_path,
             modified_kickstart_file.write(line)
         elif line.startswith("%packages"):
             modified_kickstart_file.write(line)
-            modified_kickstart_file.write("libasan")
+            for package in specific_packages:
+                modified_kickstart_file.write(package)
         else:
             modified_kickstart_file.write(line)
     kickstart_file.close()
@@ -511,8 +514,11 @@ def create_image(arch, repository_names, repository_paths, kickstart_file_path,
                    "--shrink"]
     if mic_options is not None:
         mic_command.extend(mic_options)
-    logging.debug("mic command: {0}".format(" ".join(mic_command)))
-    subprocess.call(mic_command)
+    logging.info("mic command: {0}".format(" ".join(mic_command)))
+    logging_level_initial = logging.getLogger().getEffectiveLevel()
+    logging.getLogger().setLevel(logging_level)
+    call_hidden_subprocess(mic_command)
+    logging.getLogger().setLevel(logging_level_initial)
 
 
 def find_groups_and_patterns(repository_path):
@@ -626,7 +632,8 @@ def process_repository_triplet(triplet, dependency_builder, args):
     else:
         marked_packages = build_package_set(graph, back_graph, args.forward,
                                             args.backward, args.single,
-                                            args.exclude)
+                                            args.exclude,
+                                            args.specific_packages)
     groups, patterns = find_groups_and_patterns(repository_path)
     combined_repository_path = construct_combined_repository(graph,
                                                              marked_graph,
@@ -809,4 +816,5 @@ if __name__ == '__main__':
                             " of non-marked repositories".format(package))
 
     create_image(args.arch, repository_names, combined_repository_paths,
-                 args.kickstart_file, args.outdir, args.mic_options)
+                 args.kickstart_file, args.outdir, args.mic_options,
+                 args.specific_packages, logging.DEBUG)
