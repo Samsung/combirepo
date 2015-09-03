@@ -39,6 +39,30 @@ def call_hidden_subprocess(commandline):
     return code
 
 
+def find_files_fast(directory, expression):
+    """
+    Finds all files in the given directory that match the given expression.
+
+    @param directory    The directory.
+    @param expressiion  The regular expression.
+    """
+    logging.debug("Searching expression {0} in directory "
+                  "{1}".format(expression, directory))
+    if not os.path.isdir(directory):
+        raise Exception("Directory {0} does not exist!".format(directory))
+
+    matcher = re.compile(expression)
+    files_found = []
+    for root, dirs, files in os.walk(directory):
+        for file_name in files:
+            if matcher.match(file_name):
+                path = os.path.join(root, file_name)
+                path = os.path.abspath(path)
+                files_found.append(path)
+
+    return files_found
+
+
 def split_names_list(names):
     """
     Splits the given list of names to the list of names, as follows:
@@ -527,22 +551,36 @@ def create_image(arch, repository_names, repository_paths, kickstart_file_path,
     logging.getLogger().setLevel(logging_level_initial)
 
 
-def find_groups_and_patterns(repository_path):
+def find_groups_and_patterns(directory_path):
     """
-    Finds the group.xml and patterns.xml in the given repository.
+    Finds the group.xml and patterns.xml in the given directory.
 
-    @param repository_path  The path to the repository
+    @param directory_path  The path to the directory.
 
     @return                 Paths to group.xml and patterns.xml
     """
+    all_groups = find_files_fast(directory_path, ".*group\.xml$")
+    all_patterns = find_files_fast(directory_path, ".*patterns\.xml$")
+
     groups = None
+    if len(all_groups) > 1:
+        logging.warning("Multiple groups XML files found:")
+        for file_path in all_groups:
+            logging.warning(" * {0}".format(file_path))
+        groups = all_groups[0]
+        logging.warning("Selecting {0}".format(groups))
+    elif len(all_groups) == 1:
+        groups = all_groups[0]
+
     patterns = None
-    for root, dirs, files in os.walk(repository_path):
-        for file_name in files:
-            if file_name.endswith("group.xml"):
-                groups = os.path.join(root, file_name)
-            if file_name.endswith("patterns.xml"):
-                patterns = os.path.join(root, file_name)
+    if len(all_patterns) > 1:
+        logging.warning("Multiple patterns XML files found:")
+        for file_path in all_patterns:
+            logging.warning(" * {0}".format(file_path))
+        patterns = all_patterns[0]
+    elif len(all_patterns) == 1:
+        patterns = all_patterns[0]
+
     return groups, patterns
 
 
@@ -658,10 +696,17 @@ def extract_package_groups_package(repository_path):
     @param repository_path  The path to the repository.
     """
     package_groups_package = None
-    for root, dirs, files in os.walk(repository_path):
-        for file_name in files:
-            if file_name.startswith("package-groups"):
-                package_groups_package = os.path.join(root, file_name)
+
+    package_groups_packages = find_files_fast(repository_path,
+                                              "^package-groups.*\.rpm$")
+    if len(package_groups_packages) > 1:
+        logging.warning("Multiple package-groups RPMs found:")
+        for package in package_groups_packages:
+            logging.warning(" * {0}".format(package))
+        package_groups_package = package_groups_packages[0]
+        logging.warning("Selecting {0}".format(package_groups_package))
+    elif len(package_groups_packages) == 1:
+        package_groups_package = package_groups_packages[0]
     if package_groups_package is None:
         return None, None
 
@@ -674,20 +719,7 @@ def extract_package_groups_package(repository_path):
     num_groups_files = 0
     num_patterns_files = 0
     call_hidden_subprocess(["unrpm", package_groups_package])
-    for root, dirs, files in os.walk(directory_unpacking):
-        for file_name in files:
-            if file_name.endswith("group.xml"):
-                groups = os.path.join(root, file_name)
-                num_groups_files = num_groups_files + 1
-            if file_name.endswith("patterns.xml"):
-                patterns = os.path.join(root, file_name)
-                num_patterns_files = num_patterns_files + 1
-    if num_groups_files > 1:
-        raise Exception("Found multiple group.xml files in {0}".format(
-                        package_groups_package))
-    if num_patterns_files > 1:
-        raise Exception("Found multiple patterns.xml files in {0}".format(
-                        num_patterns_files))
+    groups, patterns = find_groups_and_patterns(directory_unpacking)
     os.chdir(initial_directory)
     return groups, patterns
 
