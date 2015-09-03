@@ -1,7 +1,9 @@
 #!/usr/bin/env python2.7
 # -*- coding: utf-8 -*-
 import os
+import stat
 import shutil
+import platform
 import errno
 import argparse
 import sys
@@ -10,6 +12,7 @@ import logging
 import re
 from sets import Set
 import subprocess
+import multiprocessing
 from dependency_graph_builder import DependencyGraphBuilder
 import temporaries
 
@@ -23,10 +26,11 @@ def call_hidden_subprocess(commandline):
     @return             The return code of the process
     """
     code = 0
+    logging.info("Running the command: {0}".format(" ".join(commandline)))
+    logging.debug("       in the directory {0}".format(os.getcwd()))
     if logging.getLogger().getEffectiveLevel() <= logging.DEBUG:
         code = subprocess.call(commandline)
     else:
-        logging.info("Running the command: {0}".format(" ".join(commandline)))
         log_file_name = temporaries.create_temporary_file("process.log")
         with open(log_file_name, 'w') as log_file:
             code = subprocess.call(commandline, stdout=log_file,
@@ -237,6 +241,14 @@ def parse_args():
                         "a template")
     parser.add_argument("-o", "--outdir", type=str, action="store",
                         dest="outdir", help="Output directory for MIC.")
+    parser.add_argument("-O", "--outdir-original", type=str, action="store",
+                        dest="outdir_original", help="Output directory for "
+                        "MIC (during the original repository building)")
+    parser.add_argument("-i", "--original-image", type=str, action="store",
+                        dest="original_image", help="Don't build original "
+                        "image, use the specified one for that. Given "
+                        "argument must be the path to image or images "
+                        "directory.")
     parser.add_argument("-m", "--mirror", action="store_true",
                         dest="mirror", default=False, help="Whether to mirror"
                         " not found marked packages from non-marked "
@@ -267,9 +279,12 @@ def parse_args():
                         help="Have choice "
                         "resolving strategy for the case when there are "
                         "packages with equal names but different "
-                        "versions/build numbers.Possible values: "
+                        "versions/build numbers. Possible values: "
                         "small (prefer smaller), "
                         "big (prefer bigger).")
+    parser.add_argument("-q", "--qemu", action="store", type=str,
+                        dest="qemu_path", help="Path to qemu package that "
+                        "should be used.")
     args = run_parser(parser)
     return args
 
@@ -353,11 +368,11 @@ def create_symlink(package_name, location_from, directory_to):
         logging.error("location_from = {0}".format(location_from))
         logging.error("Location of package {0} is not properly "
                       "set!".format(package_name))
-        """
-        raise Exception("Location of package {0} is not properly"
-                        "set!".format(package_name))
-        """
-        return
+        sys.exit("Error.")
+    if not os.path.isfile(location_from):
+        logging.error("File {0} does not exist!".format(location_from))
+        sys.exit("Error.")
+
     location_to = os.path.join(directory_to,
                                os.path.basename(location_from))
 
@@ -445,8 +460,94 @@ def construct_repodata(repository_path, groups, patterns):
     workaround_repodata_open_checksum_bug(repodata_path)
 
 
+def create_patched_package(queue, package_name, release, patching_root):
+    """
+    Patches the given package using rpmrebuild and the patching root.
+
+    @param queue            The queue used for saving the resulting file name.
+    @param package_name     The basename of the package.
+    @param release          The release number of the corresponding non-marked
+                            package.
+    @param patching_root    The root used for RPM patching.
+    """
+    logging.debug("Chrooting to the directory {0}".format(patching_root))
+    os.chroot(patching_root)
+    os.chdir("/")
+    if not os.path.isfile(package_name):
+        logging.error("Package {0} is not found in patching "
+                      "root.".format(package_name))
+        sys.exit("Error.")
+
+    repmrebuild_command = ["rpmrebuild",
+                           "--release={0}".format(release), "-p", "-n",
+                           package_name]
+    logging.info("Running command: {0}".format(" ".join(repmrebuild_command)))
+    log_file_name = temporaries.create_temporary_file("rpmrebuild.log")
+    with open(log_file_name, 'w') as log_file:
+        code = subprocess.call(repmrebuild_command, stdout=log_file,
+                               stderr=log_file)
+    if code != 0:
+        logging.error("The subprocess failed!")
+        logging.error("STDERR output:")
+        with open(log_file_name, 'r') as log_file:
+            logging.error("{0}".format(log_file.read()))
+
+    result = None
+    with open(log_file_name, 'r') as log_file:
+        for line in log_file:
+            if line.startswith("result: "):
+                result = line.replace("result: ", "")
+                result = result.replace("\n", "")
+    if result is None:
+        logging.error("Failed to patch RPM file!")
+        sys.exit("Error.")
+    queue.put(result)
+
+
+def create_marked_package(package_path, directory, patching_root, release):
+    """
+    Creates the copy of given package in the given directory and adjusts its
+    release number to the given values.
+
+    @param package_path     The path to the marked package.
+    @param directory        The destination directory where to save the package
+                            copy.
+    @param patching_root    The root used for RPM patching.
+    @param release          The release number of the corresponding non-marked
+                            package.
+    """
+    if not os.path.isfile(package_path):
+        logging.error("File {0} does not exist!".format(package_path))
+        sys.exit("Error.")
+    shutil.copy(package_path, patching_root)
+    package_name = os.path.basename(package_path)
+
+    queue = multiprocessing.Queue()
+    child = multiprocessing.Process(target=create_patched_package,
+                                    args=(queue, package_name, release,
+                                          patching_root,))
+    child.start()
+    child.join()
+    patched_package_name = os.path.basename(queue.get())
+    logging.info("The package has been rebuilt to adjust release numbers: "
+                 "{0}".format(patched_package_name))
+    patched_package_paths = find_files_fast(patching_root,
+                                            patched_package_name)
+    patched_package_path = None
+    if len(patched_package_paths) < 1:
+        raise Exception("Failed to find file "
+                        "{0}".format(patched_package_name))
+    elif len(patched_package_paths) > 1:
+        raise Exception("Found multiple files "
+                        "{0}".format(patched_package_name))
+    else:
+        patched_package_path = patched_package_paths[0]
+    shutil.copy(patched_package_path, directory)
+
+
 def construct_combined_repository(graph, marked_graph, marked_packages,
-                                  if_mirror, groups, patterns):
+                                  if_mirror, groups, patterns,
+                                  patching_root):
     """
     Constructs the temporary repository that consists of symbolic links to
     packages from non-marked and marked repositories.
@@ -458,6 +559,7 @@ def construct_combined_repository(graph, marked_graph, marked_packages,
                             non-marked repository
     @param groups           Path to group.xml
     @param patterns         Path to patterns.xml
+    @param patching_root    The root used for RPM patching.
 
     @return             The path to the constructed combined repository.
     """
@@ -470,17 +572,24 @@ def construct_combined_repository(graph, marked_graph, marked_packages,
             packages_not_found.append(package)
             continue
         location_from = marked_graph.vs[package_id]["location"]
-        create_symlink(package, location_from, repository_path)
+        package_id = graph.get_name_id(package)
+        if package_id is None:
+            create_symlink(package, location_from, repository_path)
+        else:
+            release = graph.vs[package_id]["release"]
+            create_marked_package(location_from, repository_path,
+                                  patching_root, release)
 
     if len(packages_not_found) != 0:
         for package in packages_not_found:
             logging.error("Marked package {0} not found in marked "
                           "repository".format(package))
         if not if_mirror:
-            raise Exception("The above listed packages were not found in "
-                            "marked repository.\n"
-                            "HINT: use option -m to use non-marked packages "
-                            "instead of them.")
+            logging.error("The above listed packages were not found in "
+                          "marked repository.\n"
+                          "HINT: use option -m to use non-marked packages "
+                          "instead of them.")
+            sys.exit("Error.")
 
     packages = Set(graph.vs["name"])
     for package in packages:
@@ -531,7 +640,7 @@ def create_image(arch, repository_names, repository_paths, kickstart_file_path,
         elif line.startswith("%packages"):
             modified_kickstart_file.write(line)
             for package in specific_packages:
-                modified_kickstart_file.write(package)
+                modified_kickstart_file.write("{0}\n".format(package))
         else:
             modified_kickstart_file.write(line)
     kickstart_file.close()
@@ -540,8 +649,7 @@ def create_image(arch, repository_names, repository_paths, kickstart_file_path,
     # Now create the image using the "mic" tool:
     mic_command = ["sudo", "mic", "create", "loop",
                    modified_kickstart_file_path, "-A", arch, "-o",
-                   output_directory_path, "--tmpfs", "--pkgmgr=zypp",
-                   "--shrink"]
+                   output_directory_path, "--tmpfs", "--pkgmgr=zypp"]
     if mic_options is not None:
         mic_command.extend(mic_options)
     logging.info("mic command: {0}".format(" ".join(mic_command)))
@@ -621,7 +729,8 @@ def inform_about_unprovided(provided_symbols, unprovided_symbols,
                         " {0}, but none of them provides it.".format(symbol))
 
 
-def process_repository_triplet(triplet, dependency_builder, args):
+def process_repository_triplet(triplet, dependency_builder, args,
+                               patching_root):
     """
     Processes one repository triplet and constructs combined repository for
     it.
@@ -629,6 +738,7 @@ def process_repository_triplet(triplet, dependency_builder, args):
     @param triplet              The repository triplet.
     @param dependency_builder   The dependenct graph builder.
     @param args                 Common parsed command-line arguments.
+    @param patching_root        The root used for RPM patching.
 
     @return                     Path to combined repository.
     """
@@ -657,11 +767,10 @@ def process_repository_triplet(triplet, dependency_builder, args):
     # to some subgraph of the non-marked repository graph.
     # FIXME: If it's not true in some pratical cases, then the special
     # treatment is needed.
-    marked_graphs = dependency_builder.build_graph(marked_repository_path,
-                                                   args.arch,
-                                                   args.preferables,
-                                                   strategy)
-    marked_graph = marked_graphs[0]
+    marked_graph, _ = dependency_builder.build_graph(marked_repository_path,
+                                                     args.arch,
+                                                     args.preferables,
+                                                     strategy)
     inform_about_unprovided(graph.provided_symbols, graph.unprovided_symbols,
                             marked_graph.provided_symbols,
                             marked_graph.unprovided_symbols)
@@ -684,7 +793,8 @@ def process_repository_triplet(triplet, dependency_builder, args):
                                                              marked_packages,
                                                              args.mirror,
                                                              groups,
-                                                             patterns)
+                                                             patterns,
+                                                             patching_root)
     return combined_repository_path, marked_packages
 
 
@@ -810,34 +920,26 @@ def check_repository_names(names, kickstart_file_path):
         sys.exit(1)
 
 
-if __name__ == '__main__':
-    args = parse_args()
+def construct_combined_repositories(args, patching_root):
+    """
+    Constructs combined repositories based on arguments.
 
-    # These commands will be called in subprocesses, so we need to be sure
-    # that they exist in the current environment:
-    for command in ["mic", "createrepo", "modifyrepo", "sudo", "ls", "unrpm"]:
-        check_command_exists(command)
+    @param args             The argument of the program.
+    @param patching_root    The root used for RPM patching.
 
-    # Check that user has given correct arguments for repository names:
-    check_repository_names([triplet[0] for triplet in args.triplets],
-                           args.kickstart_file)
-
-    if args.regenerate_repodata:
-        for triplet in args.triplets:
-            regenerate_repodata(triplet[1], triplet[2])
-
+    @return         The list of combined repositories' paths.
+    """
     dependency_builder = DependencyGraphBuilder()
 
     combined_repository_paths = []
-    repository_names = []
     marked_packages_total = Set()
     for triplet in args.triplets:
         path, marked_packages = process_repository_triplet(triplet,
                                                            dependency_builder,
-                                                           args)
+                                                           args,
+                                                           patching_root)
         marked_packages_total = marked_packages_total | marked_packages
         combined_repository_paths.append(path)
-        repository_names.append(triplet[0])
 
     specified_packages = []
     if args.forward is not None:
@@ -852,7 +954,274 @@ if __name__ == '__main__':
         if package not in marked_packages_total:
             raise Exception("Failed to find package with name \"{0}\" in any"
                             " of non-marked repositories".format(package))
+    return combined_repository_paths
 
-    create_image(args.arch, repository_names, combined_repository_paths,
-                 args.kickstart_file, args.outdir, args.mic_options,
+
+def find_platform_images(images_directory):
+    """
+    Finds the platform images in the directory.
+
+    @param images_directory     The directory with built images.
+    @return                     The path to the selected images.
+    """
+    logging.debug("Searching in directory {0}".format(images_directory))
+    images = find_files_fast(images_directory, ".*\.img$")
+
+    if len(images) == 0:
+        logging.error("No images were found.")
+        sys.exit("Error.")
+    return images
+
+
+def produce_architecture_synonyms_list(architecture):
+    """
+    Produces the list of architecture names that are synonyms or compatible.
+
+    @param architecture The architecture.
+    """
+    if "arm64" in architecture or "aarch64" in architecture:
+        return ["aarch64", "arm64", architecture]
+    if "arm" in architecture:
+        return ["arm", architecture]
+    if "x86_64" in architecture or "86" in architecture:
+        return ["x86_64", "x86", architecture]
+
+
+def unpack_qemu_packages(directory, repositories, architecture, qemu_package):
+    """
+    Looks for all qemu packages in the given list of repositories and unpacks
+    them to the given directory.
+
+    @param directory    The directory where the packages should be unpacked.
+    @param repositories The list of repositories.
+    @param architecture The architecture of the image.
+    @param qemu_package The qemu package specified by user (if any).
+    """
+    initial_directory = os.getcwd()
+    qemu_packages = []
+
+    if qemu_package is None:
+        expression = "^qemu.*\.{0}\.rpm$".format(architecture)
+        for repository in repositories:
+            qemu_packages_portion = find_files_fast(repository, expression)
+            qemu_packages.extend(qemu_packages_portion)
+        logging.warning("The following qemu packages will be unpacked in "
+                        "chroot:")
+        for package in qemu_packages:
+            logging.warning(" * {0}".format(package))
+    else:
+        qemu_packages.append(qemu_package)
+
+    os.chdir(directory)
+    for package in qemu_packages:
+        result = call_hidden_subprocess(["unrpm", package])
+        if result != 0:
+            logging.error("Failed to unpack package.")
+            sys.exit("Error.")
+    os.chdir(initial_directory)
+
+
+def find_qemu_executable(directory, architecture):
+    """
+    Finds the appropriate qemu executable for the given architecture in the
+    given directory.
+
+    @param directory    The buildroot directory.
+    @param architecture The architecture of the image.
+    """
+
+    # The synonyms for the architecture:
+    architectures = produce_architecture_synonyms_list(architecture)
+    executables = []
+    for arch in architectures:
+        qemu_name = "^qemu-{0}$".format(arch)
+        qemu_binfmt_name = "^qemu-{0}-binfmt$".format(arch)
+        executables_portion = find_files_fast(directory, qemu_binfmt_name)
+        executables.extend(executables_portion)
+        executables_portion = find_files_fast(directory, qemu_name)
+        executables.extend(executables_portion)
+
+    logging.warning("Found several qemu executables:")
+    for path in executables:
+        path = path.replace(directory, "")
+        logging.warning(" * {0}".format(path))
+
+    path = executables[0]
+    path = path.replace(directory, "")
+    logging.warning("The following one was selected: {0}".format(path))
+    return path
+
+
+def deploy_qemu_package(directory, repositories, architecture, qemu_package):
+    """
+    Deploys all qemu packages that can be found in the specified list of
+    repositories and that have the specified architecture in the given
+    directory.
+
+    @param directory    The direcotory.
+    @param repositories The list of repositories' paths.
+    @param architecture The architecture of the image.
+    @param qemu_package The qemu package specified by user (if any).
+    """
+    unpack_qemu_packages(directory, repositories, architecture, qemu_package)
+    qemu_path = find_qemu_executable(directory, architecture)
+
+    binfmt_name = None
+    if "arm64" in architecture or "aarch64" in architecture:
+        binfmt_name = "arm64"
+    elif "arm" in architecture:
+        binfmt_name = "arm"
+
+    binfmt_directory = "/proc/sys/fs/binfmt_misc"
+    binfmt_file_path = os.path.join(binfmt_directory, binfmt_name)
+    if os.path.isfile(binfmt_file_path):
+        with open(binfmt_file_path, 'w') as binfmt_file:
+            binfmt_file.write("-1")
+
+    register_file_path = os.path.join(binfmt_directory, "register")
+    binary_format = "".join([":{0}:M::".format(binfmt_name),
+                            "\\x7fELF", "\\x01", "\\x01", "\\x01",
+                            "\\x00", "\\x00", "\\x00", "\\x00", "\\x00",
+                            "\\x00", "\\x00", "\\x00", "\\x00", "\\x02",
+                            "\\x00", "\\x28", "\\x00", ":", "\\xff", "\\xff",
+                            "\\xff", "\\xff", "\\xff", "\\xff", "\\xff",
+                            "\\x00", "\\xff", "\\xff", "\\xff", "\\xff",
+                            "\\xff", "\\xff", "\\xff", "\\xff", "\\xfe",
+                            "\\xff", "\\xff", "\\xff",
+                            ":{0}:P".format(qemu_path)])
+    with open(register_file_path, 'w') as register:
+        register.write(binary_format)
+
+
+def install_rpmrebuild(chroot_path):
+    """
+    Chroots to the given path and installs rpmrebuild in it.
+
+    @param chroot_path  The path to the chroot.
+    """
+    os.chroot(chroot_path)
+    os.chdir("/rpmrebuild/src")
+    call_hidden_subprocess(["make"])
+    call_hidden_subprocess(["make", "install"])
+    check_command_exists("rpmrebuild")
+
+
+def prepare_rpm_patching_root(images_directory, repositories, architecture,
+                              qemu_package):
+    """
+    Prepares the chroot for RPM patching.
+
+    @param images_directory     The directory with built images that will be
+                                used as a chroot.
+    @param repositories         The list of repositories.
+    @param architecture         The architecture of the image.
+    @param qemu_package         The qemu package specified by user (if any).
+
+    @return                     The path to the prepared chroot.
+    """
+    images = find_platform_images(images_directory)
+
+    directory = temporaries.create_temporary_directory("patching_root")
+
+    # For all-in-one images:
+    if len(images) == 1:
+        temporaries.mount_image(directory, image)
+    # For 3-parts images:
+    elif len(images) == 3:
+        for image in images:
+            if os.path.basename(image) == "rootfs.img":
+                rootfs_image = image
+            elif os.path.basename(image) == "system-data.img":
+                system_image = image
+            elif os.path.basename(image) == "user.img":
+                user_image = image
+            else:
+                raise Exception("Unknown image name!")
+
+        temporaries.mount_image(directory, rootfs_image)
+        system_directory = os.path.join(os.path.join(directory, "opt"))
+        if not os.path.isdir(system_directory):
+            os.mkdir(system_directory)
+        temporaries.mount_image(system_directory, system_image)
+        user_directory = os.path.join(system_directory, "usr")
+        if not os.path.isdir(user_directory):
+            os.mkdir(user_directory)
+        temporaries.mount_image(user_directory, user_image)
+    else:
+        raise Exception("This script is able to handle only all-in-one or "
+                        "three-parted images!")
+
+    host_arches = produce_architecture_synonyms_list(platform.machine())
+    if architecture not in host_arches:
+        deploy_qemu_package(directory, repositories, architecture,
+                            qemu_package)
+
+    working_directory = os.path.join(directory, "rpmrebuild")
+    combirepo_directory = os.path.dirname(os.path.realpath(__file__))
+    rpmrebuild_directory = os.path.join(combirepo_directory, "rpmrebuild")
+    if os.path.isdir(working_directory):
+        shutil.rmtree(working_directory)
+    shutil.copytree(rpmrebuild_directory, working_directory)
+
+    child = multiprocessing.Process(target=install_rpmrebuild,
+                                    args=(directory,))
+    child.start()
+    child.join()
+    return directory
+
+
+if __name__ == '__main__':
+    args = parse_args()
+
+    if os.geteuid() != 0:
+        print("Changing user to SUDO user...")
+        os.execvp("sudo", ["sudo"] + sys.argv)
+
+    # These commands will be called in subprocesses, so we need to be sure
+    # that they exist in the current environment:
+    for command in ["mic", "createrepo", "modifyrepo", "sudo", "ls", "unrpm"]:
+        check_command_exists(command)
+
+    # Check that user has given correct arguments for repository names:
+    names = [triplet[0] for triplet in args.triplets]
+    check_repository_names(names,
+                           args.kickstart_file)
+
+    if args.regenerate_repodata:
+        for triplet in args.triplets:
+            regenerate_repodata(triplet[1], triplet[2])
+
+    original_repositories = [os.path.abspath(triplet[1]) for triplet
+                             in args.triplets]
+    original_images_dir = None
+    if args.original_image is None:
+        if args.outdir_original is None:
+            directory = temporaries.create_temporary_directory("orig")
+            args.outdir_original = directory
+        original_images_dir = args.outdir_original
+        create_image(args.arch, names, original_repositories,
+                     args.kickstart_file, original_images_dir,
+                     [],
+                     ["make", "rpm-build", "rpm-libs", "rpm-devel", "sed"],
+                     logging.DEBUG)
+    else:
+        if os.path.isdir(args.original_image):
+            original_images_dir = args.original_image
+        elif os.path.isfile(args.original_image):
+            original_images_dir = os.path.dirname(args.original_image)
+        else:
+            logging.error("Given {0} is not a file or a "
+                          "directory.".format(args.original_image))
+            sys.exit("Error.")
+
+    patching_root = prepare_rpm_patching_root(original_images_dir,
+                                              original_repositories,
+                                              args.arch, args.qemu_path)
+    combined_repositories = construct_combined_repositories(args,
+                                                            patching_root)
+    mic_options = ["--shrink"]
+    if args.mic_options is list:
+        mic_options.extend(args.mic_options)
+    create_image(args.arch, names, combined_repositories,
+                 args.kickstart_file, args.outdir, mic_options,
                  args.specific_packages, logging.DEBUG)
