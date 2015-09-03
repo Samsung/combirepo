@@ -92,6 +92,9 @@ def run_parser(parser):
         parser.print_help()
         sys.exit(0)
     args = parser.parse_args()
+    if args.debug:
+        args.verbose = True
+        temporaries.debug_mode = True
     if args.verbose:
         logging.basicConfig(level=logging.DEBUG)
     else:
@@ -200,6 +203,9 @@ def parse_args():
 
     parser.add_argument("-v", "--verbose", action="store_true", dest="verbose",
                         default=False, help="Enable verbose mode")
+    parser.add_argument("-d", "--debug", action="store_true", dest="debug",
+                        default=False, help="Enable debug mode (temporaries "
+                        "will be saved)")
     parser.add_argument("-A", "--arch", type=str, action="store",
                         help="Specify repo architecture (as for MIC tool)")
     parser.add_argument("-k", "--kickstart-file", type=str, action="store",

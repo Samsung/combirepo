@@ -6,6 +6,7 @@ import shutil
 import os
 import logging
 
+debug_mode = False
 
 # FIXME: Rename default names of temporary files and directories when the
 # default name of our utility will be chosen. Now they all have prefix
@@ -25,7 +26,7 @@ def create_temporary_file(file_suffix):
     file_descriptor, path = tempfile.mkstemp(prefix='combi-repo.',
                                              suffix="." + file_suffix)
     os.close(file_descriptor)  # This helps to avoid the file descriptor leak.
-    if logging.getLogger().getEffectiveLevel() != logging.DEBUG:
+    if not debug_mode:
         atexit.register(os.remove, path)  # It will be removed at exit.
     logging.debug("Created temporary file {0}".format(path))
     return path
@@ -44,7 +45,7 @@ def create_temporary_directory(directory_suffix):
     """
     path = tempfile.mkdtemp(prefix='combi-repo.',
                             suffix="." + directory_suffix)
-    if logging.getLogger().getEffectiveLevel() != logging.DEBUG:
+    if not debug_mode:
         atexit.register(shutil.rmtree, path)  # It will be removed at exit.
     logging.debug("Created temporary file {0}".format(path))
     return path
