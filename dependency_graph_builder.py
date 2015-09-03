@@ -491,6 +491,8 @@ class DependencyGraphBuilder():
         names = []
         full_names = []
         locations = []
+        versions = []
+        releases = []
         for package in packages:
             logging.debug("Processing package {0}".format(package))
             dependency_graph.set_name_id(package.name, i)
@@ -504,13 +506,19 @@ class DependencyGraphBuilder():
             if "dontuse.rpm" in location:
                 yum_sack.delPackage(package)
             locations.append(location)
+            versions.append(package.version)
+            releases.append(package.release)
             i = i + 1
         dependency_graph.vs["name"] = names
         dependency_graph.vs["full_name"] = full_names
         dependency_graph.vs["location"] = locations
+        dependency_graph.vs["version"] = versions
+        dependency_graph.vs["release"] = releases
         back_dependency_graph.vs["name"] = names
         back_dependency_graph.vs["full_name"] = full_names
         back_dependency_graph.vs["location"] = locations
+        back_dependency_graph.vs["version"] = versions
+        back_dependency_graph.vs["release"] = releases
 
         edges = []
         back_edges = []
