@@ -567,18 +567,36 @@ def construct_combined_repository(graph, marked_graph, marked_packages,
     packages_not_found = []
 
     for package in marked_packages:
-        package_id = marked_graph.get_name_id(package)
-        if package_id is None:
+        marked_package_id = marked_graph.get_name_id(package)
+        if marked_package_id is None:
             packages_not_found.append(package)
             continue
-        location_from = marked_graph.vs[package_id]["location"]
+        location_from = marked_graph.vs[marked_package_id]["location"]
+        version_marked = marked_graph.vs[marked_package_id]["version"]
+        release_marked = marked_graph.vs[marked_package_id]["release"]
+
         package_id = graph.get_name_id(package)
         if package_id is None:
             create_symlink(package, location_from, repository_path)
         else:
+            version = graph.vs[package_id]["version"]
+            if version != version_marked:
+                logging.error("Versions of package {0} differ: {1} and {2}. "
+                              "Please go and rebuild the marked "
+                              "package!".format(package, version,
+                                                version_marked))
+                sys.exit("Error.")
             release = graph.vs[package_id]["release"]
-            create_marked_package(location_from, repository_path,
-                                  patching_root, release)
+            if release != release_marked:
+                logging.warning("Release numbers of package {0} differ: "
+                                "{1} and {2}, so the marked package will be "
+                                "patched so that to match to original release "
+                                "number.".format(package, release,
+                                                 release_marked))
+                create_marked_package(location_from, repository_path,
+                                      patching_root, release)
+            else:
+                create_symlink(package, location_from, repository_path)
 
     if len(packages_not_found) != 0:
         for package in packages_not_found:
