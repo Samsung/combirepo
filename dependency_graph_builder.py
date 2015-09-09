@@ -60,14 +60,8 @@ def _get_full_package_name(package):
 
     @return         Full package name.
     """
-    output = cStringIO.StringIO()
-    output.write("{0}".format(package))
-    file_name = str(output.getvalue())
-    output.close()
-    # Workaround for the bug when YUM returns "1:coreutils-6.9-10.2.armv7l"
-    # as package name
-    file_name = re.sub(r'[0-9]*:(.*)', r'\1', file_name)
-
+    file_name = "{0}-{1}-{2}.{3}".format(package.name, package.version,
+                                         package.release, package.arch)
     return file_name
 
 
