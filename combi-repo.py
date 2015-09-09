@@ -230,9 +230,10 @@ def parse_args():
                         " the final list of marked packages.")
 
     parser.add_argument("-S", "--specific-package", type=str, action="append",
-                        dest="specific_packages", help="The name of package "
-                        "that is not installed to the image by default, but "
-                        "that must be installed in this build.")
+                        dest="specific_packages", default=["libasan"],
+                        help="The name of package that is not installed to "
+                        "the image by default, but that must be installed in "
+                        "this build.")
 
     parser.add_argument("-v", "--verbose", action="store_true", dest="verbose",
                         default=False, help="Enable verbose mode")
