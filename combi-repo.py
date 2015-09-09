@@ -292,8 +292,10 @@ def parse_args():
                         "small (prefer smaller), "
                         "big (prefer bigger).")
     parser.add_argument("-q", "--qemu", action="store", type=str,
-                        dest="qemu_path", help="Path to qemu package that "
-                        "should be used.")
+                        dest="qemu_path", help="Path to qemu that should be "
+                        "used. You can specify the path either to RPM "
+                        "package with qemu or to the working qemu executable "
+                        "itself")
     args = run_parser(parser)
     return args
 
@@ -897,20 +899,24 @@ def check_command_exists(command):
     the program in the case of failure.
 
     @param command  The command.
-
+    @return         True if exists, false if file exists, exits otherwise.
     """
     logging.debug("Checking command \"{0}\"".format(command))
     try:
         DEV_NULL = open(os.devnull, 'w')
         subprocess.call([command], stdout=DEV_NULL, stderr=DEV_NULL)
     except OSError as error:
-        if error.errno == errno.ENOENT:
+        if os.path.isfile(command):
+            logging.error("File {0} cannot be executed.".format(command))
+            return False
+        elif error.errno == errno.ENOENT:
             logging.error("\"{0}\" command is not available. Try to "
                           "install it!".format(command))
         else:
             logging.error("Unknown error happened during checking the "
                           "command \"{0}\"!".format(command))
-        sys.exit(1)
+        sys.exit("Error.")
+    return True
 
 
 def check_repository_names(names, kickstart_file_path):
@@ -1069,17 +1075,78 @@ def find_qemu_executable(directory, architecture):
         executables.extend(executables_portion)
 
     logging.warning("Found several qemu executables:")
+    working_executables = []
     for path in executables:
+        relative_path = os.path.relpath(path, directory)
+        if check_command_exists(path):
+            working_executables.append(path)
+            summary = "workinig"
+        else:
+            summary = "not working"
         path = path.replace(directory, "")
-        logging.warning(" * {0}".format(path))
+        logging.warning(" * /{0} ({1})".format(relative_path, summary))
 
-    path = executables[0]
-    path = path.replace(directory, "")
-    logging.warning("The following one was selected: {0}".format(path))
-    return path
+    if len(working_executables) < 1:
+        logging.error("No working qemu executables found!")
+        sys.exit("Error.")
+    else:
+        selected_path = working_executables[0]
+
+    relative_path = os.path.relpath(selected_path, directory)
+    logging.warning("The following one was selected: "
+                    "{0}".format(relative_path))
+    return "/{0}".format(relative_path)
 
 
-def deploy_qemu_package(directory, repositories, architecture, qemu_package):
+def get_binfmt_name(architecture):
+    """
+    Gets the name of binfmt file by the architecture.
+
+    @param architecture The architecture.
+    @return             The binafmt name.
+    """
+    binfmt_name = None
+    if "arm64" in architecture or "aarch64" in architecture:
+        binfmt_name = "arm64"
+    elif "arm" in architecture:
+        binfmt_name = "arm"
+    else:
+        raise Exception("Behavior for architecture {0} is not "
+                        "implemented!".format(architecture))
+    return binfmt_name
+
+
+def process_user_qemu_executable(directory, qemu_path):
+    """
+    Processes the qemu executable specified by user, checks it and in case of
+    success copies it to the directory.
+    """
+    qemu_executable_path = None
+    if os.path.isfile(qemu_path):
+        # FIXME: Here should be file type checking.
+        if not os.path.basename(qemu_path).endswith(".rpm"):
+            logging.info("Checking specified qemu executable "
+                         "{0}...".format(qemu_path))
+            if not check_command_exists(qemu_path):
+                logging.error("The specified qemu executable is not working.")
+            else:
+                install_directory = os.path.join(directory, "usr/local/bin")
+                if not os.path.isdir(install_directory):
+                    os.makedirs(os.path.join(install_directory))
+                install_path = os.path.join(install_directory,
+                                            os.path.basename(qemu_path))
+                shutil.copy(qemu_path, install_path)
+                relative_path = os.path.relpath(install_path, directory)
+                qemu_executable_path = "/{0}".format(relative_path)
+
+    else:
+        logging.error("Specified file {0} does not exist or is not a "
+                      "file!".format(qemu_path))
+        sys.exit("Error.")
+    return qemu_executable_path
+
+
+def deploy_qemu_package(directory, repositories, architecture, qemu_path):
     """
     Deploys all qemu packages that can be found in the specified list of
     repositories and that have the specified architecture in the given
@@ -1088,17 +1155,18 @@ def deploy_qemu_package(directory, repositories, architecture, qemu_package):
     @param directory    The direcotory.
     @param repositories The list of repositories' paths.
     @param architecture The architecture of the image.
-    @param qemu_package The qemu package specified by user (if any).
+    @param qemu_path    The qemu package/executable specified by user (if any).
     """
-    unpack_qemu_packages(directory, repositories, architecture, qemu_package)
-    qemu_path = find_qemu_executable(directory, architecture)
+    qemu_executable_path = None
+    if qemu_path is not None:
+        qemu_executable_path = process_user_qemu_executable(directory,
+                                                            qemu_path)
 
-    binfmt_name = None
-    if "arm64" in architecture or "aarch64" in architecture:
-        binfmt_name = "arm64"
-    elif "arm" in architecture:
-        binfmt_name = "arm"
+    if qemu_executable_path is None:
+        unpack_qemu_packages(directory, repositories, architecture, qemu_path)
+        qemu_executable_path = find_qemu_executable(directory, architecture)
 
+    binfmt_name = get_binfmt_name(architecture)
     binfmt_directory = "/proc/sys/fs/binfmt_misc"
     binfmt_file_path = os.path.join(binfmt_directory, binfmt_name)
     if os.path.isfile(binfmt_file_path):
@@ -1115,7 +1183,7 @@ def deploy_qemu_package(directory, repositories, architecture, qemu_package):
                             "\\x00", "\\xff", "\\xff", "\\xff", "\\xff",
                             "\\xff", "\\xff", "\\xff", "\\xff", "\\xfe",
                             "\\xff", "\\xff", "\\xff",
-                            ":{0}:P".format(qemu_path)])
+                            ":{0}:P".format(qemu_executable_path)])
     with open(register_file_path, 'w') as register:
         register.write(binary_format)
 
@@ -1134,7 +1202,7 @@ def install_rpmrebuild(chroot_path):
 
 
 def prepare_rpm_patching_root(images_directory, repositories, architecture,
-                              qemu_package):
+                              qemu_path):
     """
     Prepares the chroot for RPM patching.
 
@@ -1142,7 +1210,8 @@ def prepare_rpm_patching_root(images_directory, repositories, architecture,
                                 used as a chroot.
     @param repositories         The list of repositories.
     @param architecture         The architecture of the image.
-    @param qemu_package         The qemu package specified by user (if any).
+    @param qemu_path            The qemu package/executable specified by user
+                                (if any).
 
     @return                     The path to the prepared chroot.
     """
@@ -1181,7 +1250,7 @@ def prepare_rpm_patching_root(images_directory, repositories, architecture,
     host_arches = produce_architecture_synonyms_list(platform.machine())
     if architecture not in host_arches:
         deploy_qemu_package(directory, repositories, architecture,
-                            qemu_package)
+                            qemu_path)
 
     working_directory = os.path.join(directory, "rpmrebuild")
     combirepo_directory = os.path.dirname(os.path.realpath(__file__))
