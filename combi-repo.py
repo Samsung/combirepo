@@ -12,36 +12,11 @@ import logging
 import re
 from sets import Set
 import subprocess
+import hidden_subprocess
 import multiprocessing
 from dependency_graph_builder import DependencyGraphBuilder
 import temporaries
 import binfmt
-
-
-def call_hidden_subprocess(commandline):
-    """
-    Calls the subprocess and hides all its output.
-
-    @param commandline  The list of command-line words to be executed.
-
-    @return             The return code of the process
-    """
-    code = 0
-    logging.info("Running the command: {0}".format(" ".join(commandline)))
-    logging.debug("       in the directory {0}".format(os.getcwd()))
-    if logging.getLogger().getEffectiveLevel() <= logging.DEBUG:
-        code = subprocess.call(commandline)
-    else:
-        log_file_name = temporaries.create_temporary_file("process.log")
-        with open(log_file_name, 'w') as log_file:
-            code = subprocess.call(commandline, stdout=log_file,
-                                   stderr=log_file)
-        if code != 0:
-            logging.error("The subprocess failed!")
-            logging.error("STDERR output:")
-            with open(log_file_name, 'r') as log_file:
-                logging.error("{0}".format(log_file.read()))
-    return code
 
 
 def find_files_fast(directory, expression):
@@ -416,7 +391,7 @@ def workaround_repodata_open_checksum_bug(repodata_path):
         backup_group_file = temporaries.create_temporary_file("group.xml")
         shutil.copy(group_file, backup_group_file)
         backup_group_files.append((group_file, backup_group_file))
-        exit_value = call_hidden_subprocess(["modifyrepo", "--remove",
+        exit_value = hidden_subprocess.call(["modifyrepo", "--remove",
                                             group_file, repodata_path])
         if exit_value != 0:
             raise Exception("modifyrepo failed with exit value = "
@@ -454,7 +429,7 @@ def construct_repodata(repository_path, groups, patterns):
         if groups != groups_local:
             shutil.copy(groups, groups_local)
         createrepo_command.extend(["-g", "repodata/group.xml"])
-    exit_value = call_hidden_subprocess(createrepo_command)
+    exit_value = hidden_subprocess.call(createrepo_command)
     if exit_value != 0:
         raise Exception("createrepo failed with exit value = "
                         "{0}".format(exit_value))
@@ -463,7 +438,7 @@ def construct_repodata(repository_path, groups, patterns):
         patterns_local = os.path.join(repodata_path, "patterns.xml")
         if patterns != patterns_local:
             shutil.copy(patterns, patterns_local)
-        exit_value = call_hidden_subprocess(["modifyrepo", patterns_local,
+        exit_value = hidden_subprocess.call(["modifyrepo", patterns_local,
                                             repodata_path])
         if exit_value != 0:
             raise Exception("modifyrepo failed with exit value = "
@@ -631,7 +606,7 @@ def construct_combined_repository(graph, marked_graph, marked_packages,
         create_symlink(package, location_from, repository_path)
 
     if logging.getLogger().getEffectiveLevel() == logging.DEBUG:
-        call_hidden_subprocess(["ls", "-l", repository_path])
+        hidden_subprocess.call(["ls", "-l", repository_path])
 
     construct_repodata(repository_path, groups, patterns)
     return repository_path
@@ -685,7 +660,7 @@ def create_image(arch, repository_names, repository_paths, kickstart_file_path,
     logging.info("mic command: {0}".format(" ".join(mic_command)))
     logging_level_initial = logging.getLogger().getEffectiveLevel()
     logging.getLogger().setLevel(logging_level)
-    call_hidden_subprocess(mic_command)
+    hidden_subprocess.call(mic_command)
     logging.getLogger().setLevel(logging_level_initial)
 
 
@@ -858,7 +833,7 @@ def extract_package_groups_package(repository_path):
     patterns = None
     num_groups_files = 0
     num_patterns_files = 0
-    call_hidden_subprocess(["unrpm", package_groups_package])
+    hidden_subprocess.call(["unrpm", package_groups_package])
     groups, patterns = find_groups_and_patterns(directory_unpacking)
     os.chdir(initial_directory)
     return groups, patterns
@@ -1048,7 +1023,7 @@ def unpack_qemu_packages(directory, repositories, architecture, qemu_package):
 
     os.chdir(directory)
     for package in qemu_packages:
-        result = call_hidden_subprocess(["unrpm", package])
+        result = hidden_subprocess.call(["unrpm", package])
         if result != 0:
             logging.error("Failed to unpack package.")
             sys.exit("Error.")
@@ -1161,8 +1136,8 @@ def install_rpmrebuild(queue, chroot_path):
     """
     os.chroot(chroot_path)
     os.chdir("/rpmrebuild/src")
-    call_hidden_subprocess(["make"])
-    call_hidden_subprocess(["make", "install"])
+    hidden_subprocess.call(["make"])
+    hidden_subprocess.call(["make", "install"])
     check_command_exists("rpmrebuild")
     queue.put(True)
 
@@ -1310,7 +1285,7 @@ if __name__ == '__main__':
                      [],
                      ["shadow-utils", "coreutils",
                       "make", "rpm-build", "sed"],
-                     logging.DEBUG)
+                     logging.INFO)
     else:
         if os.path.isdir(args.original_image):
             original_images_dir = args.original_image
