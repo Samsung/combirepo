@@ -14,3 +14,6 @@ manifest.json
 # If combi-repo.py is run just from the git directory, *.pyc files are
 # generated:
 *.pyc
+
+# VIM temporary files:
+.*.swp
