@@ -15,6 +15,7 @@ import subprocess
 import multiprocessing
 from dependency_graph_builder import DependencyGraphBuilder
 import temporaries
+import binfmt
 
 
 def call_hidden_subprocess(commandline):
@@ -1098,24 +1099,6 @@ def find_qemu_executable(directory, architecture):
     return "/{0}".format(relative_path)
 
 
-def get_binfmt_name(architecture):
-    """
-    Gets the name of binfmt file by the architecture.
-
-    @param architecture The architecture.
-    @return             The binafmt name.
-    """
-    binfmt_name = None
-    if "arm64" in architecture or "aarch64" in architecture:
-        binfmt_name = "arm64"
-    elif "arm" in architecture:
-        binfmt_name = "arm"
-    else:
-        raise Exception("Behavior for architecture {0} is not "
-                        "implemented!".format(architecture))
-    return binfmt_name
-
-
 def process_user_qemu_executable(directory, qemu_path):
     """
     Processes the qemu executable specified by user, checks it and in case of
@@ -1146,33 +1129,6 @@ def process_user_qemu_executable(directory, qemu_path):
     return qemu_executable_path
 
 
-binfmt_magic = {}
-binfmt_mask = {}
-binfmt_flag = {}
-binfmt_magic["arm"] = "".join(["\\x7fELF",
-                               "\\x01", "\\x01", "\\x01", "\\x00",
-                               "\\x00", "\\x00", "\\x00", "\\x00",
-                               "\\x00", "\\x00", "\\x00", "\\x00",
-                               "\\x02", "\\x00", "\\x28", "\\x00"])
-binfmt_mask["arm"] = "".join(["\\xff", "\\xff", "\\xff", "\\xff",
-                              "\\xff", "\\xff", "\\xff", "\\x00",
-                              "\\xff", "\\xff", "\\xff", "\\xff",
-                              "\\xff", "\\xff", "\\xff", "\\xff",
-                              "\\xfe", "\\xff", "\\xff", "\\xff"])
-binfmt_magic["arm64"] = "".join(["\\x7fELF",
-                                 "\\x02", "\\x01", "\\x01", "\\x00",
-                                 "\\x00", "\\x00", "\\x00", "\\x00",
-                                 "\\x00", "\\x00", "\\x00", "\\x00",
-                                 "\\x02", "\\x00", "\\xb7"])
-binfmt_mask["arm64"] = "".join(["\\xff", "\\xff", "\\xff", "\\xff",
-                                "\\xff", "\\xff", "\\xff", "\\x00",
-                                "\\xff", "\\xff", "\\xff", "\\xff",
-                                "\\xff", "\\xff", "\\xff", "\\xff",
-                                "\\xfe", "\\xff", "\\xff"])
-binfmt_flag["qemu"] = "OC"
-binfmt_flag["qemu-wrapper"] = "P"
-
-
 def deploy_qemu_package(directory, repositories, architecture, qemu_path):
     """
     Deploys all qemu packages that can be found in the specified list of
@@ -1193,25 +1149,8 @@ def deploy_qemu_package(directory, repositories, architecture, qemu_path):
         unpack_qemu_packages(directory, repositories, architecture, qemu_path)
         qemu_executable_path = find_qemu_executable(directory, architecture)
 
-    binfmt_name = get_binfmt_name(architecture)
-    binfmt_directory = "/proc/sys/fs/binfmt_misc"
-    binfmt_status_path = os.path.join(binfmt_directory, "status")
-    logging.debug("binfmt_status_path = {0}".format(binfmt_status_path))
-    if os.path.isfile(binfmt_status_path):
-        with open(binfmt_status_path, 'w') as binfmt_status:
-            binfmt_status.write("-1\n")
-
-    qemu_type = "qemu"
-    if os.path.basename(qemu_executable_path).endswith("-binfmt"):
-        qemu_type = "qemu-wrapper"
-    binfmt_register_path = os.path.join(binfmt_directory, "register")
-    binary_format = ":{0}:M::{1}:{2}:{3}:{4}".format(binfmt_name,
-                                                     binfmt_magic[binfmt_name],
-                                                     binfmt_mask[binfmt_name],
-                                                     qemu_executable_path,
-                                                     binfmt_flag[qemu_type])
-    with open(binfmt_register_path, 'w') as register:
-        register.write(binary_format)
+    binfmt.disable_all()
+    binfmt.register(architecture, qemu_executable_path)
 
 
 def install_rpmrebuild(queue, chroot_path):
