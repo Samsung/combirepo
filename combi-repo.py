@@ -1304,6 +1304,38 @@ def prepare_rpm_patching_root(images_directory, repositories, architecture,
     return directory
 
 
+def prepare_empty_kickstart_file(kickstart_file_path):
+    """
+    Removes group tags from %packages section so that to provide minimal
+    packages set build.
+
+    @param kickstart_file_path  The path to original kickstart file.
+    @return                     The path to the patched kickstart file.
+    """
+    modified_kickstart_file_path = temporaries.create_temporary_file("mod.ks")
+    kickstart_file = open(kickstart_file_path, "r")
+    modified_kickstart_file = open(modified_kickstart_file_path, "w")
+
+    if_packages_section = False
+    for line in kickstart_file:
+        if if_packages_section:
+            if line.startswith("%end"):
+                if_packages_section = False
+                modified_kickstart_file.write(line)
+            elif line.startswith("@"):
+                modified_kickstart_file.write("#{0}".format(line))
+            else:
+                modified_kickstart_file.write(line)
+        elif line.startswith("%packages"):
+            if_packages_section = True
+            modified_kickstart_file.write(line)
+        else:
+            modified_kickstart_file.write(line)
+    kickstart_file.close()
+    modified_kickstart_file.close()
+    return modified_kickstart_file_path
+
+
 if __name__ == '__main__':
     args = parse_args()
 
@@ -1333,10 +1365,12 @@ if __name__ == '__main__':
             directory = temporaries.create_temporary_directory("orig")
             args.outdir_original = directory
         original_images_dir = args.outdir_original
+        kickstart_patched = prepare_empty_kickstart_file(args.kickstart_file)
         create_image(args.arch, names, original_repositories,
-                     args.kickstart_file, original_images_dir,
+                     kickstart_patched, original_images_dir,
                      [],
-                     ["make", "rpm-build", "rpm-libs", "rpm-devel", "sed"],
+                     ["shadow-utils", "coreutils",
+                      "make", "rpm-build", "sed"],
                      logging.DEBUG)
     else:
         if os.path.isdir(args.original_image):
