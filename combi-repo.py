@@ -1188,7 +1188,7 @@ def deploy_qemu_package(directory, repositories, architecture, qemu_path):
         register.write(binary_format)
 
 
-def install_rpmrebuild(chroot_path):
+def install_rpmrebuild(queue, chroot_path):
     """
     Chroots to the given path and installs rpmrebuild in it.
 
@@ -1199,6 +1199,7 @@ def install_rpmrebuild(chroot_path):
     call_hidden_subprocess(["make"])
     call_hidden_subprocess(["make", "install"])
     check_command_exists("rpmrebuild")
+    queue.put(True)
 
 
 def prepare_rpm_patching_root(images_directory, repositories, architecture,
@@ -1259,10 +1260,21 @@ def prepare_rpm_patching_root(images_directory, repositories, architecture,
         shutil.rmtree(working_directory)
     shutil.copytree(rpmrebuild_directory, working_directory)
 
+    queue = multiprocessing.Queue()
     child = multiprocessing.Process(target=install_rpmrebuild,
-                                    args=(directory,))
+                                    args=(queue, directory,))
     child.start()
     child.join()
+    if queue.empty():
+        logging.error("Failed to install rpmrebuild into chroot.")
+        sys.exit("Error.")
+    else:
+        result = queue.get()
+        if result:
+            logging.debug("Installation of rpmrebuild successfully "
+                          "completed.")
+        else:
+            raise Exception("Impossible happened.")
     return directory
 
 
