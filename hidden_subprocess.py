@@ -8,6 +8,9 @@ import logging
 import temporaries
 
 
+visible_mode = False
+
+
 class RepeatingTimer(threading._Timer):
     """
     Simple timer.
@@ -48,11 +51,13 @@ def call(commandline):
     @return             The return code of the process
     """
     code = 0
+    global counter
     counter = 1
     logging.info("Running the command: {0}".format(" ".join(commandline)))
     logging.debug("       in the directory {0}".format(os.getcwd()))
 
-    if temporaries.debug_mode:
+    global visible_mode
+    if visible_mode:
         code = subprocess.call(commandline)
     else:
         log_file_name = temporaries.create_temporary_file("process.log")

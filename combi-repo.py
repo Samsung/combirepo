@@ -99,8 +99,10 @@ def run_parser(parser):
     if args.debug:
         args.verbose = True
         temporaries.debug_mode = True
+        hidden_subprocess.visible_mode = True
     if args.verbose:
         logging_level = logging.DEBUG
+        hidden_subprocess.visible_mode = True
     else:
         logging_level = logging.INFO
 
