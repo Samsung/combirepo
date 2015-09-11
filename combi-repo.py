@@ -5,7 +5,6 @@ import stat
 import shutil
 import argparse
 import sys
-import glob
 import logging
 import re
 from sets import Set
@@ -18,6 +17,7 @@ import binfmt
 import files
 import check
 from rpm_patcher import RpmPatcher
+from repository import Repository, RepositoryData
 
 
 def split_names_list(names):
@@ -347,88 +347,8 @@ def create_symlink(package_name, location_from, directory_to):
     os.symlink(location_from, location_to)
 
 
-def workaround_repodata_open_checksum_bug(repodata_path):
-    """
-    Workarounds some bug in repodata creation.
-
-    This is a workaround for the case when tag <open-checksum> for group.xml
-    is not created in repomd.xml file.
-
-    Nota Bene: This somehow reproduces the standard Tizen repodata creation.
-    If you see repodata on release servers, group.xml in them is not
-    registered in repomd.xml file, but *.group.xml.gz file is registered in
-    it.
-
-    Without this workaround mic will fail during the repodata parsing.
-
-    @param repodata_path  The path to the repodata directory.
-    """
-    initial_directory = os.getcwd()
-    os.chdir(repodata_path)
-    backup_group_files = []
-    for group_file in glob.glob("*group.xml"):
-        backup_group_file = temporaries.create_temporary_file("group.xml")
-        shutil.copy(group_file, backup_group_file)
-        backup_group_files.append((group_file, backup_group_file))
-        exit_value = hidden_subprocess.call(["modifyrepo", "--remove",
-                                            group_file, repodata_path])
-        if exit_value != 0:
-            raise Exception("modifyrepo failed with exit value = "
-                            "{0}".format(exit_value))
-
-    # Restore backuped group files, but they will not be registered in
-    # repomd.xml file anymore.
-    for backup_group_file in backup_group_files:
-        shutil.copy(backup_group_file[1], backup_group_file[0])
-
-    os.chdir(initial_directory)
-
-
-def construct_repodata(repository_path, groups, patterns):
-    """
-    Constructs the repodata in the given repository
-
-    @param repository_path  The path to the repository
-    @param groups           Path to group.xml (may be empty)
-    @param patterns         Path to patterns.xml (may be empty)
-    """
-    repository_path = os.path.abspath(repository_path)
-    if groups is not None:
-        groups = os.path.abspath(groups)
-    if patterns is not None:
-        patterns = os.path.abspath(patterns)
-
-    repodata_path = os.path.join(repository_path, "repodata")
-    if not os.path.isdir(repodata_path):
-        os.mkdir(repodata_path)
-    createrepo_command = ["createrepo", repository_path, "--database",
-                          "--unique-md-filenames"]
-    if groups is not None:
-        groups_local = os.path.join(repodata_path, "group.xml")
-        if groups != groups_local:
-            shutil.copy(groups, groups_local)
-        createrepo_command.extend(["-g", "repodata/group.xml"])
-    exit_value = hidden_subprocess.call(createrepo_command)
-    if exit_value != 0:
-        raise Exception("createrepo failed with exit value = "
-                        "{0}".format(exit_value))
-
-    if patterns is not None:
-        patterns_local = os.path.join(repodata_path, "patterns.xml")
-        if patterns != patterns_local:
-            shutil.copy(patterns, patterns_local)
-        exit_value = hidden_subprocess.call(["modifyrepo", patterns_local,
-                                            repodata_path])
-        if exit_value != 0:
-            raise Exception("modifyrepo failed with exit value = "
-                            "{0}".format(exit_value))
-
-    workaround_repodata_open_checksum_bug(repodata_path)
-
-
 def construct_combined_repository(graph, marked_graph, marked_packages,
-                                  if_mirror, groups, patterns,
-                                  rpm_patcher):
+                                  if_mirror, rpm_patcher):
     """
     Constructs the temporary repository that consists of symbolic links to
     packages from non-marked and marked repositories.
@@ -438,8 +358,6 @@ def construct_combined_repository(graph, marked_graph, marked_packages,
     @param marked_packages  Set of marked package names
     @param if_mirror        Whether to mirror not found marked packages from
                             non-marked repository
-    @param groups           Path to group.xml
-    @param patterns         Path to patterns.xml
     @param rpm_patcher      The patcher of RPMs.
 
     @return             The path to the constructed combined repository.
@@ -501,7 +419,6 @@ def construct_combined_repository(graph, marked_graph, marked_packages,
     if logging.getLogger().getEffectiveLevel() == logging.DEBUG:
         hidden_subprocess.call(["ls", "-l", repository_path])
 
-    construct_repodata(repository_path, groups, patterns)
     return repository_path
 
 
@@ -553,39 +470,6 @@ def create_image(arch, repository_names, repository_paths, kickstart_file_path,
         mic_command.extend(mic_options)
     logging.info("mic command: {0}".format(" ".join(mic_command)))
     hidden_subprocess.call(mic_command)
-
-
-def find_groups_and_patterns(directory_path):
-    """
-    Finds the group.xml and patterns.xml in the given directory.
-
-    @param directory_path  The path to the directory.
-
-    @return                 Paths to group.xml and patterns.xml
-    """
-    all_groups = files.find_fast(directory_path, ".*group\.xml$")
-    all_patterns = files.find_fast(directory_path, ".*patterns\.xml$")
-
-    groups = None
-    if len(all_groups) > 1:
-        logging.warning("Multiple groups XML files found:")
-        for file_path in all_groups:
-            logging.warning(" * {0}".format(file_path))
-        groups = all_groups[0]
-        logging.warning("Selecting {0}".format(groups))
-    elif len(all_groups) == 1:
-        groups = all_groups[0]
-
-    patterns = None
-    if len(all_patterns) > 1:
-        logging.warning("Multiple patterns XML files found:")
-        for file_path in all_patterns:
-            logging.warning(" * {0}".format(file_path))
-        patterns = all_patterns[0]
-    elif len(all_patterns) == 1:
-        patterns = all_patterns[0]
-
-    return groups, patterns
 
 
 def inform_about_unprovided(provided_symbols, unprovided_symbols,
@@ -683,51 +567,18 @@ def process_repository_triplet(triplet, dependency_builder, args,
                                             args.backward, args.single,
                                             args.exclude,
                                             args.specific_packages)
-    groups, patterns = find_groups_and_patterns(repository_path)
+    repository = Repository(repository_path)
+    repository.prepare_data()
+    repodata = repository.data
     combined_repository_path = construct_combined_repository(graph,
                                                              marked_graph,
                                                              marked_packages,
                                                              args.mirror,
-                                                             groups,
-                                                             patterns,
                                                              rpm_patcher)
+    combined_repository = Repository(combined_repository_path)
+    combined_repository.set_data(repodata)
+    combined_repository.generate_derived_data()
     return combined_repository_path, marked_packages
-
-
-def extract_package_groups_package(repository_path):
-    """
-    Searches for group.xml and patterns.xml in the package-groups-*.rpm
-    package in the given repository (if exists) and returns them.
-
-    @param repository_path  The path to the repository.
-    """
-    package_groups_package = None
-
-    package_groups_packages = files.find_fast(repository_path,
-                                              "^package-groups.*\.rpm$")
-    if len(package_groups_packages) > 1:
-        logging.warning("Multiple package-groups RPMs found:")
-        for package in package_groups_packages:
-            logging.warning(" * {0}".format(package))
-        package_groups_package = package_groups_packages[0]
-        logging.warning("Selecting {0}".format(package_groups_package))
-    elif len(package_groups_packages) == 1:
-        package_groups_package = package_groups_packages[0]
-    if package_groups_package is None:
-        return None, None
-
-    package_groups_package = os.path.abspath(package_groups_package)
-    directory_unpacking = temporaries.create_temporary_directory("groups")
-    initial_directory = os.getcwd()
-    os.chdir(directory_unpacking)
-    groups = None
-    patterns = None
-    num_groups_files = 0
-    num_patterns_files = 0
-    hidden_subprocess.call(["unrpm", package_groups_package])
-    groups, patterns = find_groups_and_patterns(directory_unpacking)
-    os.chdir(initial_directory)
-    return groups, patterns
 
 
 def regenerate_repodata(repository_path, marked_repository_path):
@@ -739,25 +590,19 @@ def regenerate_repodata(repository_path, marked_repository_path):
     Uses group.xml and patterns.xml from any path inside repository, if these
     files don't exist they're unpacked from package-groups.rpm
     """
-    groups, patterns = find_groups_and_patterns(repository_path)
+    repository = Repository(repository_path)
+    repodata = repository.get_data()
+    if repodata.groups_data is None:
+        logging.warning("There is no groups data in "
+                        "{0}".format(repository_path))
+    if repodata.patterns_data is None:
+        logging.warning("There is no patterns data in "
+                        "{0}".format(repository_path))
+    repository.generate_derived_data()
 
-    if groups is None or patterns is None:
-        groups, patterns = extract_package_groups_package(repository_path)
-    else:
-        logging.warning("The repository {0} contains files {1} and {2}! They "
-                        "will be used as groups and patterns "
-                        "files!".format(repository_path, groups, patterns))
-
-    if groups is None or patterns is None:
-        logging.warning("There is no group.xml, patterns.xml and valid "
-                        "package-groups rpm in the repository! The repository "
-                        "will be generated without groups and patterns files!")
-    else:
-        groups = os.path.abspath(groups)
-        patterns = os.path.abspath(patterns)
-
-    construct_repodata(repository_path, groups, patterns)
-    construct_repodata(marked_repository_path, groups, patterns)
+    marked_repository = Repository(marked_repository_path)
+    marked_repository.set_data(repodata)
+    marked_repository.generate_derived_data()
 
 
 def check_repository_names(names, kickstart_file_path):
