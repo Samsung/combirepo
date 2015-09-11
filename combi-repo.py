@@ -322,32 +322,6 @@ def build_package_set(graph, back_graph, forward, backward, single, exclude,
     return marked
 
 
-def create_symlink(package_name, location_from, directory_to):
-    """
-    Creates symlink from file to the file with the same name in the another
-    directory.
-
-    @param package          The name of package
-    @param location_from    Source of the symlink
-    @param directory_to     Destination directory of the symlink
-    """
-    if not isinstance(location_from, str):
-        logging.error("location_from = {0}".format(location_from))
-        logging.error("Location of package {0} is not properly "
-                      "set!".format(package_name))
-        sys.exit("Error.")
-    if not os.path.isfile(location_from):
-        logging.error("File {0} does not exist!".format(location_from))
-        sys.exit("Error.")
-
-    location_to = os.path.join(directory_to,
-                               os.path.basename(location_from))
-
-    logging.debug("Creating symlink from {0} to {1}".format(location_from,
-                                                            location_to))
-    os.symlink(location_from, location_to)
-
-
 def construct_combined_repository(graph, marked_graph, marked_packages,
                                   if_mirror, rpm_patcher):
     """
@@ -377,7 +351,7 @@ def construct_combined_repository(graph, marked_graph, marked_packages,
 
         package_id = graph.get_name_id(package)
         if package_id is None:
-            create_symlink(package, location_from, repository_path)
+            files.create_symlink(package, location_from, repository_path)
         else:
             version = graph.vs[package_id]["version"]
             if version != version_marked:
@@ -395,7 +369,7 @@ def construct_combined_repository(graph, marked_graph, marked_packages,
                                                  release_marked))
                 rpm_patcher.patch(location_from, repository_path, release)
             else:
-                create_symlink(package, location_from, repository_path)
+                files.create_symlink(package, location_from, repository_path)
 
     if len(packages_not_found) != 0:
         for package in packages_not_found:
@@ -415,7 +389,7 @@ def construct_combined_repository(graph, marked_graph, marked_packages,
                 continue
         package_id = graph.get_name_id(package)
         location_from = graph.vs[package_id]["location"]
-        create_symlink(package, location_from, repository_path)
+        files.create_symlink(package, location_from, repository_path)
 
     if logging.getLogger().getEffectiveLevel() == logging.DEBUG:
         hidden_subprocess.call(["ls", "-l", repository_path])
