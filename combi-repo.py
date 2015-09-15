@@ -18,6 +18,7 @@ import files
 import check
 from rpm_patcher import RpmPatcher
 from repository import Repository, RepositoryData
+from kickstart_parser import KickstartFile
 
 
 def split_names_list(names):
@@ -439,28 +440,11 @@ def create_image(arch, repository_names, repository_paths, kickstart_file_path,
                                     installed.
     """
     modified_kickstart_file_path = temporaries.create_temporary_file("mod.ks")
-    kickstart_file = open(kickstart_file_path, "r")
-    modified_kickstart_file = open(modified_kickstart_file_path, "w")
-
-    for line in kickstart_file:
-        if line.startswith("repo "):
-            for i in range(len(repository_names)):
-                if " --name={0} ".format(repository_names[i]) in line:
-                    path = repository_paths[i]
-                    line = re.sub(r'\s+--baseurl=\S+\s+',
-                                  r" --baseurl=file://{0} ".format(path),
-                                  line)
-                    logging.debug("Writting the following line to kickstart "
-                                  "file: \n{0}".format(line))
-            modified_kickstart_file.write(line)
-        elif line.startswith("%packages"):
-            modified_kickstart_file.write(line)
-            for package in specific_packages:
-                modified_kickstart_file.write("{0}\n".format(package))
-        else:
-            modified_kickstart_file.write(line)
-    kickstart_file.close()
-    modified_kickstart_file.close()
+    shutil.copy(kickstart_file_path, modified_kickstart_file_path)
+    kickstart_file = KickstartFile(modified_kickstart_file_path)
+    kickstart_file.replace_repository_paths(repository_names,
+                                            repository_paths)
+    kickstart_file.add_packages(specific_packages)
 
     # Now create the image using the "mic" tool:
     mic_command = ["sudo", "mic", "create", "loop",
@@ -613,17 +597,8 @@ def check_repository_names(names, kickstart_file_path):
     @param names                The list of names specified by user.
     @param kickstart_file_path  The kickstart file.
     """
-    try:
-        kickstart_file = open(kickstart_file_path, "r")
-    except IOError:
-        logging.error("Failed to open file {0}".format(kickstart_file_path))
-        sys.exit(1)
-
-    possible_names = []
-    for line in kickstart_file:
-        if line.startswith("repo "):
-            possible_names.extend(re.findall(r"--name=(\S+)", line))
-
+    kickstart_file = KickstartFile(kickstart_file_path)
+    possible_names = kickstart_file.get_repository_names()
     if_error = False
     for name in names:
         if name not in possible_names:
@@ -633,10 +608,6 @@ def check_repository_names(names, kickstart_file_path):
                           "by user.".format(name, kickstart_file_path))
             logging.error("Possible names are: {0}".format(possible_names))
             if_error = True
-
-    kickstart_file.close()
-    if if_error:
-        sys.exit(1)
 
 
 def construct_combined_repositories(args, rpm_patcher):
@@ -685,26 +656,9 @@ def prepare_empty_kickstart_file(kickstart_file_path):
     @return                     The path to the patched kickstart file.
     """
     modified_kickstart_file_path = temporaries.create_temporary_file("mod.ks")
-    kickstart_file = open(kickstart_file_path, "r")
-    modified_kickstart_file = open(modified_kickstart_file_path, "w")
-
-    if_packages_section = False
-    for line in kickstart_file:
-        if if_packages_section:
-            if line.startswith("%end"):
-                if_packages_section = False
-                modified_kickstart_file.write(line)
-            elif line.startswith("@"):
-                modified_kickstart_file.write("#{0}".format(line))
-            else:
-                modified_kickstart_file.write(line)
-        elif line.startswith("%packages"):
-            if_packages_section = True
-            modified_kickstart_file.write(line)
-        else:
-            modified_kickstart_file.write(line)
-    kickstart_file.close()
-    modified_kickstart_file.close()
+    shutil.copy(kickstart_file_path, modified_kickstart_file_path)
+    kickstart_file = KickstartFile(modified_kickstart_file_path)
+    kickstart_file.comment_all_groups()
     return modified_kickstart_file_path
 
 
