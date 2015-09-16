@@ -1,0 +1,126 @@
+.TH COMBIREPO 1
+.SH NAME
+combirepo \- combines several repositories into firmware
+.SH SYNOPSIS
+.B combirepo\fR [\fIOPTIONS\fR]
+.IR triplets\ ...
+.SH DESCRIPTION
+.B combirepo
+combines several repositories into firmware. Intended to be used together with \fBOBS\fR-produced repositories.
+.SS TERMS AND ABBREVIATIONS
+.TP
+.BR original\fR\ repository
+Repository which is used as base for building - usually contains a repository which is
+used for traditional firmware build.
+.TP
+.BR marked\fR\ repository
+Repository which has changes in build procedure and has packages with certain uncommon
+features: Address Sanitizer enabled, LTO switched on and so on.
+.TP
+.BR kickstart\fR\ file
+A build description script file used by mic tool for firmware creation.
+.TP
+.BR triplet\fR
+Combination of
+.IR \(lqrepository_name\ original_path\ marked_path\(rq \fR
+used for mapping marked repositories to original ones
+.SH OPTIONS
+.SY combirepo
+.TP
+.BR \-h ", " \-\-help\fR
+Shows help on options
+.TP
+.BR \-v ", " \-\-verbose\fR
+Enable verbose mode.
+.IP
+Produces a lot of output, usually helps to identify the issue root
+cause if the tool doesn't work as intender.
+.TP
+.BR \-d ", " \-\-debug\fR
+Enable debug mode.
+.IP
+\fBUSE WITH CAUTION\fR: creates and leaves a lot of files in filesystem.
+.TP
+.BR \-m ", " \-\-mirror\fR
+Mirror not found marked packages from non-marked repository
+.TP
+.BR \-r ", " \-\-regenerate-repodata\fR
+Re-generate the repodata for specified repositories
+.TP
+.BR \-g ", " \-\-greedy\fR
+Greedy mode: get as much packages from marked repository as possible, and get
+others from non-marked repository.
+.TP
+.BR \-l ", " \-\-logfile  =\fILOG_FILE_NAME\fR
+Log all output to the given file.
+.TP
+.BR \-f ", " \-\-forward =\fIFORWARD\fR
+Sets packages to include into firmware with forward dependencies
+.TP
+.BR \-b ", " \-\-backward =\fIBACKWARD\fR
+Sets packages to include into firmware with backward dependencies
+.TP
+.BR \-s ", " \-\-single =\fISINGLE\fR
+Sets packages to include into firmware without dependencies
+.TP
+.BR \-e ", " \-\-exclude =\fIEXCLUDE\fR
+The name of package that should be excluded from the final list of marked
+packages.
+.TP
+.BR \-S ", " \-\-specific-package =\fISPECIFIC_PACKAGES\fR
+The name of package that is not installed to the image by default, but that
+must be installed in this build.
+.TP
+.BR \-A ", " \-\-arch =\fIARCH\fR
+Specify repo architecture (as for MIC tool)
+.TP
+.BR \-k ", " \-\-kickstart-file =\fIKICKSTART_FILE\fR
+Kickstart file used as a template
+.TP
+.BR \-o ", " \-\-outdir =\fIOUTDIR\fR
+Output directory for MIC.
+.TP
+.BR \-O ", " \-\-outdir-original =\fIOUTDIR_ORIGINAL\fR
+Output directory for MIC (during the original repository building)
+.TP
+.BR \-i ", " \-\-original-image =\fIORIGINAL_IMAGE\fR
+Don't build original image, use the specified one for that. Given argument must
+be the path to image or images directory.
+.TP
+.BR \-M ", " \-\-mic-options =\fIMIC_OPTIONS\fR
+Additional options for MIC. By default the following options are set:
+.IP
+sudo mic create loop
+<KICKSTART_FILE> -A <ARCH> \\
+.EE
+-o <OUTDIR> --tmpfs --pkgmgr=zypp --shrink
+.ED
+.IP
+You can append options to add new or change old ones.
+.TP
+.BR \-p ", " \-\-prefer =\fIPREFERABLES\fR
+Package names that should be prefered in case of "have choice" issues.
+.TP
+.BR \-P ", " \-\-preferring-strategy =\fIPREFERRING_STRATEGY\fR
+Have choice resolving strategy for the case when there are packages with equal
+names but different versions/build numbers. Possible values:
+small (prefer smaller)
+big (prefer bigger)
+.TP
+.BR \-q ", " \-\-qemu =\fIQEMU_PATH\fR
+Path to qemu that should be used. You can specify the path either to RPM package
+with qemu or to the working qemu executable itself
+.YQ
+.PD
+.SH SEE ALSO
+mic(1), osc(1), gbs(1), createrepo(8), modifyrepo(1)
+.SH AUTHORS
+Contact
+.MT i.palachev@\:samsung.com
+Ilya Palachev
+.ME
+or
+.MT v.barinov@\:samsung.com
+Vyacheslav Barinov
+.ME
+for more information
