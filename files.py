@@ -3,6 +3,7 @@
 import os
 import logging
 import re
+import check
 
 
 def find_fast(directory, expression):
@@ -14,8 +15,7 @@ def find_fast(directory, expression):
     """
     logging.debug("Searching expression {0} in directory "
                   "{1}".format(expression, directory))
-    if not os.path.isdir(directory):
-        raise Exception("Directory {0} does not exist!".format(directory))
+    check.directory_exists(directory)
 
     matcher = re.compile(expression)
     files_found = []

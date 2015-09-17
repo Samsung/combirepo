@@ -460,15 +460,10 @@ def process_repository_triplet(triplet, dependency_builder, args,
     repository_name = triplet[0]
     logging.info("Processing repository \"{0}\"".format(repository_name))
     repository_path = triplet[1]
-    if not os.path.isdir(repository_path):
-        logging.error("Repository {0} does not "
-                      "exist!".format(repository_path))
-        sys.exit(1)
+    check.directory_exists(repository_path)
+
     marked_repository_path = triplet[2]
-    if not os.path.isdir(marked_repository_path):
-        logging.error("Repository {0} does not "
-                      "exist!".format(marked_repository_path))
-        sys.exit(1)
+    check.directory_exists(marked_repository_path)
 
     strategy = args.preferring_strategy
     graph, back_graph = dependency_builder.build_graph(repository_path,
