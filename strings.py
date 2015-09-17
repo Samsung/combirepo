@@ -48,4 +48,19 @@ def is_valid_identifier(string):
     @return         True, if it is a valid identifier, false otherwise.
     """
     identifier = re.compile(r"^[^\d\W]\w*\Z")
-    return re.match(identifier, string)
+    return re.match(identifier, string) is not None
+
+
+def is_ascii_string(string):
+    """
+    Checks whether the given string is an ASCII string.
+
+    @param string   The string to be checked.
+    @return         True, if it is a valid ASCII string, false otherwise.
+    """
+    try:
+        string.decode('ascii')
+    except UnicodeDecodeError:
+        return False
+    else:
+        return True

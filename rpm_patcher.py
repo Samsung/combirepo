@@ -12,6 +12,13 @@ import files
 import check
 import hidden_subprocess
 import binfmt
+from kickstart_parser import KickstartFile
+import repository_combiner
+
+
+developer_outdir_original = None
+developer_original_image = None
+developer_qemu_path = None
 
 
 class RpmPatcher():
@@ -19,22 +26,22 @@ class RpmPatcher():
     The object of this class is used to patch RPMs so that to make them
     possible to be installed in the combined image.
     """
-    def __init__(self, images_directory, repositories, architecture,
-                 qemu_path):
+    def __init__(self, names, repositories, architecture, kickstart_file_path):
         """
         Initializes the RPM patcher (does nothing).
 
-        @param images_directory     The directory with built images that will
-                                    be used as a chroot.
+        @param names                The list of repository names.
         @param repositories         The list of repositories.
         @param architecture         The architecture of the image.
-        @param qemu_path            The qemu package/executable specified by
-                                    user (if any).
+        @param kickstart_file_path  The path to the working kickstart file.
         """
-        self.images_directory = images_directory
+        self.images_directory = None
+        self.names = names
         self.repositories = repositories
         self.architecture = architecture
-        self.qemu_path = qemu_path
+        self.kickstart_file_path = kickstart_file_path
+        global developer_qemu_path
+        self.qemu_path = developer_qemu_path
         self.patching_root = None
 
     def __find_platform_images(self):
@@ -231,7 +238,7 @@ class RpmPatcher():
         """
         Prepares the patching root ready for RPM patching.
         """
-
+        self.__prepare_image()
         images = self.__find_platform_images()
         self.patching_root = temporaries.create_temporary_directory("root")
 
@@ -288,10 +295,7 @@ class RpmPatcher():
                       "{0}".format(self.patching_root))
         os.chroot(self.patching_root)
         os.chdir("/")
-        if not os.path.isfile(package_name):
-            logging.error("Package {0} is not found in patching "
-                          "root.".format(package_name))
-            sys.exit("Error.")
+        check.file_exists(package_name)
 
         # FIXME: This should also be handled with hidden_subprocess module.
         rpmrebuild_command = ["rpmrebuild",
@@ -331,9 +335,7 @@ class RpmPatcher():
         @param release          The release number of the corresponding
                                 non-marked package.
         """
-        if not os.path.isfile(package_path):
-            logging.error("File {0} does not exist!".format(package_path))
-            sys.exit("Error.")
+        check.file_exists(package_path)
         shutil.copy(package_path, self.patching_root)
         package_name = os.path.basename(package_path)
 
@@ -357,3 +359,47 @@ class RpmPatcher():
         else:
             patched_package_path = patched_package_paths[0]
         shutil.copy(patched_package_path, directory)
+
+    def __prepare_image(self):
+        """
+        Prepares the image needed for the RPM patcher.
+
+        @param architecture         The architecture of the image.
+        @param repository_pairs     The list of repository pairs.
+        @param kickstart_file_path  The path to the working kickstartin file.
+
+        @return                     The directory with preliminary images.
+        """
+        original_images_dir = None
+        global developer_original_image
+        global developer_outdir_original
+        self.images_directory = developer_outdir_original
+        if self.__find_platform_images() is not None:
+            return
+
+        if developer_original_image is None:
+            if developer_outdir_original is None:
+                directory = temporaries.create_temporary_directory("orig")
+                developer_outdir_original = directory
+            original_images_dir = developer_outdir_original
+            path = temporaries.create_temporary_file("mod.ks")
+            shutil.copy(self.kickstart_file_path, path)
+            kickstart_file = KickstartFile(path)
+            kickstart_file.comment_all_groups()
+            logging.debug("Repositories: {0}".format(self.repositories))
+            repository_combiner.create_image(self.architecture, self.names,
+                                             self.repositories,
+                                             path, original_images_dir,
+                                             [],
+                                             ["shadow-utils", "coreutils",
+                                              "make", "rpm-build", "sed"])
+        else:
+            if os.path.isdir(developer_original_image):
+                original_images_dir = developer_original_image
+            elif os.path.isfile(developer_original_image):
+                original_images_dir = os.path.dirname(developer_original_image)
+            else:
+                logging.error("Given {0} is not a file or a "
+                              "directory.".format(developer_original_image))
+                sys.exit("Error.")
+        self.images_directory = original_images_dir

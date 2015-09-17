@@ -38,23 +38,55 @@ def command_exists(command):
 
 def directory_exists(directory_path):
     """
-    Checks whether the directory exists and abort the program in the case of
+    Checks whether the directory exists and aborts the program in the case of
     failure.
+
+    @param directory_path   The path to the directory.
     """
+    if directory_path is None:
+        raise Exception("Argument {0} is None!".format(directory_path))
     if not os.path.isdir(directory_path):
         logging.error("Directory {0} does not exist!".format(directory_path))
         sys.exit("Error.")
 
 
+def file_exists(file_path):
+    """
+    Checks whether the file exists and aborts the program in the case of
+    failure.
+
+    @param file_path        The path to the file.
+    """
+    if file_path is None:
+        raise Exception("Argument {0} is None!".format(file_path))
+    if not os.path.isfile(file_path):
+        logging.error("File {0} does not exist!".format(file_path))
+        sys.exit("Error.")
+
+
 def valid_identifier(string):
     """
-    Checks whether the given string is a valid identifier and abort the program
-    in the case of failure.
+    Checks whether the given string is a valid identifier and aborts the
+    program in the case of failure.
 
     @param string       The string to be checked.
     """
-    if string is not str:
-        raise Exception("Argument {0} is not a string!".format(string))
+    if string is None:
+        raise Exception("Argument {0} is None!".format(string))
     if not strings.is_valid_identifier(string):
         logging.error("String {0} is not a valid identifier!".format(string))
+        sys.exit("Error.")
+
+
+def valid_ascii_string(string):
+    """
+    Checks whether the given string is a valid ASCII string and aborts the
+    program in the case of failure.
+
+    @param string       Teh string to be checked.
+    """
+    if string is None:
+        raise Exception("Argument {0} is None!".format(string))
+    if not strings.is_ascii_string(string):
+        logging.error("String {0} is not an ASCII string!".format(string))
         sys.exit("Error.")
