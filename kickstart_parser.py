@@ -40,6 +40,9 @@ class KickstartFile():
                                     (must be local).
         """
         lines = []
+        if repository_names is None or len(repository_names) == 0:
+            logging.error("No repository names are given! "
+                          "{0}".format(repository_names))
 
         with open(self.path, "r") as kickstart_file:
             for line in kickstart_file:
@@ -75,6 +78,7 @@ class KickstartFile():
                         lines.append(line)
                     elif line.startswith("@"):
                         lines.append("#{0}".format(line))
+                        logging.debug("Added line #{0}".format(line))
                     else:
                         lines.append(line)
                 elif line.startswith("%packages"):
@@ -101,6 +105,7 @@ class KickstartFile():
                     lines.append(line)
                     for package in packages:
                         lines.append("{0}\n".format(package))
+                        logging.debug("Added package {0}".format(package))
                 else:
                     lines.append(line)
 

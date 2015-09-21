@@ -1,6 +1,7 @@
 #!/usr/bin/env python2.7
 # -*- coding: utf-8 -*-
 import os
+import sys
 import logging
 import re
 import check
@@ -38,14 +39,7 @@ def create_symlink(package_name, location_from, directory_to):
     @param location_from    Source of the symlink
     @param directory_to     Destination directory of the symlink
     """
-    if not isinstance(location_from, str):
-        logging.error("location_from = {0}".format(location_from))
-        logging.error("Location of package {0} is not properly "
-                      "set!".format(package_name))
-        sys.exit("Error.")
-    if not os.path.isfile(location_from):
-        logging.error("File {0} does not exist!".format(location_from))
-        sys.exit("Error.")
+    check.file_exists(location_from)
 
     location_to = os.path.join(directory_to,
                                os.path.basename(location_from))

@@ -3,6 +3,7 @@
 import os
 import sys
 import logging
+import check
 
 
 binfmt_directory = "/proc/sys/fs/binfmt_misc"
@@ -31,13 +32,10 @@ def disable_all():
     Disables or registered binary formats
     """
     binfmt_status_path = os.path.join(binfmt_directory, "status")
-    if not os.path.isfile(binfmt_status_path):
-        logging.error("binfmt status file does not exit!")
-        sys.exit("Error.")
+    check.file_exists(binfmt_status_path)
 
-    if os.path.isfile(binfmt_status_path):
-        with open(binfmt_status_path, 'w') as binfmt_status:
-            binfmt_status.write("-1\n")
+    with open(binfmt_status_path, 'w') as binfmt_status:
+        binfmt_status.write("-1\n")
 
 
 binfmt_magic = {}
@@ -80,9 +78,7 @@ def register(architecture, qemu_executable_path):
     if os.path.basename(qemu_executable_path).endswith("-binfmt"):
         qemu_type = "qemu-wrapper"
     binfmt_register_path = os.path.join(binfmt_directory, "register")
-    if not os.path.isfile(binfmt_register_path):
-        logging.error("binfmt register file does not exist!")
-        sys.exit("Error.")
+    check.file_exists(binfmt_register_path)
 
     binfmt_name = get_name(architecture)
     binary_format = ":{0}:M::{1}:{2}:{3}:{4}".format(binfmt_name,

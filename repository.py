@@ -106,7 +106,7 @@ class RepositoryData():
         os.chdir(initial_directory)
 
 
-class Repository():
+class Repository(object):
     """
     Repository handle that is used to generate standard repodata in different
     situations.
