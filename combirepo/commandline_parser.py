@@ -97,9 +97,8 @@ class CommandlineParser():
                                   dest="log_file_name", help="Log all output "
                                   "to the given file.")
         self._parser.add_argument("-c", "--config", type=str, action="store",
-                                  dest="config", default="~/.combirepo.conf",
-                                  help="Use the custom config file instead of "
-                                  "default one.")
+                                  dest="config", help="Use the custom config "
+                                  "file instead of default one.")
 
     def __register_mic_related_options(self):
         """
@@ -228,7 +227,7 @@ class CommandlineParser():
         else:
             logging.basicConfig(level=logging_level)
 
-        config_parser.default_path = os.path.expanduser(arguments.config)
+        config_parser.initialize_config(arguments.config)
 
     def __build_repository_pairs(self, arguments):
         """

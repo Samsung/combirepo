@@ -11,7 +11,37 @@ from parameters import RepositoryCombinerParameters, valid_package_keys
 from repository_pair import RepositoryPair
 
 
-default_path = None
+default_path = "~/.combirepo.conf"
+
+
+def initialize_config(config_file_path):
+    """
+    Checks the given config and initializes it if it is not set and does not
+    exist.
+
+    @param config_file_path The path to config file, or None in case the
+                            default onw should be used.
+    """
+    help_url = "http://confluence.rnd.samsung.ru/display/TC/Config+file+format"
+    global default_path
+    if config_file_path is None:
+        config_file_path = os.path.expanduser(default_path)
+        if not os.path.isfile(config_file_path):
+            logging.warning("Default config {0} does not exist! It will "
+                            "be generated, but you should complete it with "
+                            "repository paths, package names and other "
+                            " options.".format(config_file_path))
+            config = configparser.SafeConfigParser(allow_no_value=True)
+            config.add_section('general')
+            config.set('general', '# See documentation about combirepo '
+                       'config file format at page {0}'.format(help_url))
+            with open(config_file_path, 'wb') as config_file:
+                config.write(config_file)
+    else:
+        config_file_path = os.path.expanduser(config_file_path)
+        check.file_exists(config_file_path)
+
+    default_path = config_file_path
 
 
 class ConfigParser():
