@@ -1,4 +1,4 @@
 [submodule "combirepo/rpmrebuild"]
 	path = rpmrebuild
-	url = ssh://i.palachev@gerrit.rnd.samsung.ru:1205/tizen-tc/rpmrebuild.git
+	url = ssh://gerrit.rnd.samsung.ru:1205/tizen-tc/rpmrebuild.git
 	revision = .
