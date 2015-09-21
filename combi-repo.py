@@ -19,30 +19,7 @@ import check
 from rpm_patcher import RpmPatcher
 from repository import Repository, RepositoryData
 from kickstart_parser import KickstartFile
-
-
-def split_names_list(names):
-    """
-    Splits the given list of names to the list of names, as follows:
-
-    gcc,bash m4
-    flex;bison,yacc
-
-    to python list ["gcc", "bash", "m4", "flex", "bison", "yacc"]
-
-    @param names    The list of names
-
-    @return         The splitted list of names
-    """
-    if names is None:
-        return None
-    splitted_names = []
-    for name in names:
-        for splitted_name in re.split("[\,\;\ \n\t]", name):
-            splitted_names.append(splitted_name)
-
-    logging.debug("Resulting list after splitting: {0}".format(splitted_names))
-    return splitted_names
+from strings import split_names_list
 
 
 def convert_list_to_sequential_tuples(flat_list, tuple_length):
