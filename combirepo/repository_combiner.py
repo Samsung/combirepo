@@ -94,7 +94,7 @@ def construct_combined_repository(graph, marked_graph, marked_packages,
 
     @return             The path to the constructed combined repository.
     """
-    repository_path = temporaries.create_temporary_directory("combi-repo")
+    repository_path = temporaries.create_temporary_directory("combirepo")
     packages_not_found = []
 
     for package in marked_packages:

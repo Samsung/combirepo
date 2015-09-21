@@ -17,13 +17,13 @@ valid_prefer_strategies = ["small", "big"]
 
 class RepositoryCombinerParameters(object):
     """
-    Combi-repo parameters are the characterization of combi-repo's behaviour at
+    Combi-repo parameters are the characterization of combirepo's behaviour at
     run-time. Command line and config parsing construct this structure and then
     the tool runs using it only.
     """
     def __init__(self):
         """
-        Initializes the combi-repo parameters (does nothing).
+        Initializes the combirepo parameters (does nothing).
         """
         self._profile_name = None
         self._temporary_directory_path = None
@@ -53,7 +53,7 @@ class RepositoryCombinerParameters(object):
 
     @property
     def temporary_directory_path(self):
-        """The directory where combi-repo stores its cache."""
+        """The directory where combirepo stores its cache."""
         check.directory_exists(self._temporary_directory_path)
         return self._temporary_directory_path
 

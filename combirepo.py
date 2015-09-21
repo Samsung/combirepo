@@ -1,9 +1,9 @@
 #!/usr/bin/env python2.7
 # -*- coding: utf-8 -*-
 import os
-from commandline_parser import CommandlineParser
-from config_parser import ConfigParser
-import repository_combiner
+from combirepo.commandline_parser import CommandlineParser
+from combirepo.config_parser import ConfigParser
+import combirepo.repository_combiner
 
 
 if __name__ == '__main__':
@@ -15,4 +15,4 @@ if __name__ == '__main__':
         properties = config_properties + commandline_properties
     else:
         properties = commandline_properties
-    repository_combiner.combine(properties)
+    combirepo.repository_combiner.combine(properties)

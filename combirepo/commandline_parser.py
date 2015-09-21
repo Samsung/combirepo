@@ -97,7 +97,7 @@ class CommandlineParser():
                                   dest="log_file_name", help="Log all output "
                                   "to the given file.")
         self._parser.add_argument("-c", "--config", type=str, action="store",
-                                  dest="config", default="~/.combi-repo.conf",
+                                  dest="config", default="~/.combirepo.conf",
                                   help="Use the custom config file instead of "
                                   "default one.")
 
@@ -129,7 +129,7 @@ class CommandlineParser():
 
     def __register_special_options(self):
         """
-        Registers the options that control specific combi-repo behaviour.
+        Registers the options that control specific combirepo behaviour.
         """
         self._parser.add_argument("-m", "--mirror", action="store_true",
                                   dest="mirror", default=False,

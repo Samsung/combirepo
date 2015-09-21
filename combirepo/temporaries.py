@@ -11,16 +11,12 @@ import logging
 debug_mode = False
 default_directory = None
 
-# FIXME: Rename default names of temporary files and directories when the
-# default name of our utility will be chosen. Now they all have prefix
-# "combi-repo". Also it should be better to have some "macro" for it.
-
 
 def create_temporary_file(file_suffix):
     """
     Creates temporary file in tmpfs, named as follows:
 
-    /tmp/combi-repo.<random>.<suffix>
+    default_directory/combirepo.<random>.<suffix>
 
     @param file_suffix      The suffix of temporary file.
 
@@ -29,7 +25,7 @@ def create_temporary_file(file_suffix):
     global default_directory
     if not os.path.isdir(default_directory):
         os.makedirs(default_directory)
-    file_descriptor, path = tempfile.mkstemp(prefix='combi-repo.',
+    file_descriptor, path = tempfile.mkstemp(prefix='combirepo.',
                                              suffix="." + file_suffix,
                                              dir=default_directory)
     os.close(file_descriptor)  # This helps to avoid the file descriptor leak.
@@ -39,12 +35,11 @@ def create_temporary_file(file_suffix):
     return path
 
 
-# FIXME: Ditto.
 def create_temporary_directory(directory_suffix):
     """
     Creates temporary directory in tmpfs, named as follows:
 
-    /tmp/combi-repo.<random>.<suffix>
+    default_directory/combirepo.<random>.<suffix>
 
     @param file_suffix      The suffix of temporary directory.
 
@@ -53,7 +48,7 @@ def create_temporary_directory(directory_suffix):
     global default_directory
     if not os.path.isdir(default_directory):
         os.makedirs(default_directory)
-    path = tempfile.mkdtemp(prefix='combi-repo.',
+    path = tempfile.mkdtemp(prefix='combirepo.',
                             suffix="." + directory_suffix,
                             dir=default_directory)
     if not debug_mode:
@@ -66,7 +61,7 @@ def mount_image(directory, image_path):
     """
     Creates temporary mount point of the given image in the given directory.
 
-    /tmp/combi-repo.<random>.<suffix>
+    default_directory/combirepo.<random>.<suffix>
 
     and mounts the image to it.
 

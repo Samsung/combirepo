@@ -121,7 +121,7 @@ class ConfigParser():
         """
         Parses the given config file and returns the properties structure.
 
-        @return     The parameters structure of combi-erpo tool.
+        @return     The parameters structure of combirepo tool.
         """
         check.file_exists(self.path)
         self.parser.read(self.path)
