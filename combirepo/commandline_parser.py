@@ -318,6 +318,10 @@ class CommandlineParser():
         supplementary_url = arguments.repository_supplementary_url
         parameters.repository_supplementary_url = supplementary_url
 
+        if not os.path.isdir(arguments.cachedir):
+            logging.warning("Creating combirepo temporary directory "
+                            "{0} ...".format(arguments.cachedir))
+            os.mkdir(arguments.cachedir)
         parameters.temporary_directory_path = arguments.cachedir
         directory = os.path.join(arguments.cachedir, "temporaries")
         temporaries.default_directory = os.path.abspath(directory)
