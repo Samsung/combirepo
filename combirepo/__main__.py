@@ -1,12 +1,12 @@
 #!/usr/bin/env python2.7
 # -*- coding: utf-8 -*-
 import os
-from combirepo.commandline_parser import CommandlineParser
-from combirepo.config_parser import ConfigParser
-import combirepo.repository_combiner
+from commandline_parser import CommandlineParser
+from config_parser import ConfigParser
+import repository_combiner
 
 
-if __name__ == '__main__':
+def main(args=None):
     commandline_parser = CommandlineParser()
     commandline_properties = commandline_parser.parse()
     config_parser = ConfigParser()
@@ -15,4 +15,8 @@ if __name__ == '__main__':
         properties = config_properties + commandline_properties
     else:
         properties = commandline_properties
-    combirepo.repository_combiner.combine(properties)
+    repository_combiner.combine(properties)
+
+
+if __name__ == '__main__':
+    main()

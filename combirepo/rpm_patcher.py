@@ -228,6 +228,8 @@ class RpmPatcher():
         @param queue    The queue where the result will be put.
         """
         os.chroot(self.patching_root)
+        os.chdir("/")
+        hidden_subprocess.call(["tar", "xf", "rpmrebuild.tar"])
         os.chdir("/rpmrebuild/src")
         hidden_subprocess.call(["make"])
         hidden_subprocess.call(["make", "install"])
@@ -259,11 +261,11 @@ class RpmPatcher():
             self.__deploy_qemu_package()
 
         working_directory = os.path.join(self.patching_root, "rpmrebuild")
-        combirepo_directory = os.path.dirname(os.path.realpath(__file__))
-        rpmrebuild_directory = os.path.join(combirepo_directory, "rpmrebuild")
+        combirepo_dir = os.path.abspath(os.path.dirname(__file__))
+        rpmrebuild_file = os.path.join(combirepo_dir, 'data/rpmrebuild.tar')
         if os.path.isdir(working_directory):
             shutil.rmtree(working_directory)
-        shutil.copytree(rpmrebuild_directory, working_directory)
+        shutil.copy(rpmrebuild_file, working_directory)
 
         queue = multiprocessing.Queue()
         child = multiprocessing.Process(target=self.__install_rpmrebuild,
