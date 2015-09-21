@@ -5,6 +5,7 @@ import sys
 import errno
 import subprocess
 import logging
+import strings
 
 
 def command_exists(command):
@@ -33,3 +34,27 @@ def command_exists(command):
                           "command \"{0}\"!".format(command))
         sys.exit("Error.")
     return True
+
+
+def directory_exists(directory_path):
+    """
+    Checks whether the directory exists and abort the program in the case of
+    failure.
+    """
+    if not os.path.isdir(directory_path):
+        logging.error("Directory {0} does not exist!".format(directory_path))
+        sys.exit("Error.")
+
+
+def valid_identifier(string):
+    """
+    Checks whether the given string is a valid identifier and abort the program
+    in the case of failure.
+
+    @param string       The string to be checked.
+    """
+    if string is not str:
+        raise Exception("Argument {0} is not a string!".format(string))
+    if not strings.is_valid_identifier(string):
+        logging.error("String {0} is not a valid identifier!".format(string))
+        sys.exit("Error.")

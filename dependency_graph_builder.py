@@ -10,6 +10,7 @@ import cStringIO
 from sets import Set
 import igraph
 import temporaries
+import check
 
 
 class DependencyGraph(igraph.Graph):
@@ -328,9 +329,7 @@ class DependencyGraphBuilder():
         # because it will be written to the config file.
         repository_path = os.path.abspath(repository_path)
 
-        if not os.path.isdir(repository_path):
-            raise Exception("Directory {0} does not exist!".format(
-                            repository_path))
+        check.directory_exists(repository_path)
         self.repository_path = repository_path
 
         # Create the unique repository ID.

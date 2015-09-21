@@ -7,6 +7,7 @@ import glob
 import hidden_subprocess
 import temporaries
 import files
+import check
 
 
 class RepositoryData():
@@ -110,21 +111,32 @@ class Repository():
     Repository handle that is used to generate standard repodata in different
     situations.
     """
-    def __init__(self, path):
+    def __init__(self, path=None):
         """
         Initializes the repository (does nothing).
-
-        @param path The path to the repository directory.
         """
-        self.path = path
+        self._path = path
         self.data = RepositoryData()
+
+    @property
+    def path(self):
+        """The path to the repository."""
+
+    @path.setter
+    def path(self, value):
+        check.directory_exists(value)
+        self._path = value
+
+    @path.deleter
+    def path(self):
+        del self._path
 
     def prepare_data(self):
         """
         Prepares the data into the run-time object that can be used by other
         parts of program.
         """
-        repodata_path = os.path.join(self.path, "repodata")
+        repodata_path = os.path.join(self._path, "repodata")
 
         if not os.path.isdir(repodata_path):
             logging.warning("There is no repodata directory in repository "
@@ -134,11 +146,11 @@ class Repository():
 
             if (self.data.groups_data is None
                     or self.data.patterns_data is None):
-                self.data.find_in_directory(self.path)
+                self.data.find_in_directory(self._path)
 
             if (self.data.groups_data is None
                     or self.data.patterns_data is None):
-                self.data.find_in_repository(self.path)
+                self.data.find_in_repository(self._path)
 
     def set_data(self, data):
         """
@@ -172,7 +184,7 @@ class Repository():
         Without this workaround mic will fail during the repodata parsing.
         """
         initial_directory = os.getcwd()
-        repodata_path = os.path.join(self.path, "repodata")
+        repodata_path = os.path.join(self._path, "repodata")
         os.chdir(repodata_path)
         backup_group_files = []
         for group_file in glob.glob("*group.xml"):
@@ -196,11 +208,11 @@ class Repository():
         """
         Generates the automatically generated data of the repository.
         """
-        self.path = os.path.abspath(self.path)
+        self._path = os.path.abspath(self._path)
         initial_directory = os.getcwd()
-        os.chdir(self.path)
+        os.chdir(self._path)
 
-        repodata_path = os.path.join(self.path, "repodata")
+        repodata_path = os.path.join(self._path, "repodata")
         if os.path.isdir(repodata_path):
             logging.warning("The repository data already exists in "
                             "{0}! It will be removed and "
@@ -210,7 +222,7 @@ class Repository():
         else:
             os.mkdir(repodata_path)
 
-        createrepo_command = ["createrepo", self.path, "--database",
+        createrepo_command = ["createrepo", self._path, "--database",
                               "--unique-md-filenames"]
         if self.data.groups_data is not None:
             groups_file_path = os.path.join(repodata_path, "group.xml")
