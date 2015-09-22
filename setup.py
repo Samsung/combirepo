@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from setuptools import setup, find_packages
+from setuptools import setup
 from setuptools.command.sdist import sdist
 from setuptools.command.install import install
 from setuptools.py31compat import get_config_vars
@@ -32,6 +32,8 @@ class CustomInstallCommand(install):
         man_path = '{0}/share/man/man1/'.format(prefix)
         man_file = path.join(path.dirname(path.abspath(__file__)),
                              "combirepo", "data", "combirepo.1")
+        if not path.exists(man_file):
+            self.run_command('build_manpage')
         print "Installing man page into {0}".format(man_path)
         cmd = "bash -c 'gzip {0} \
                && install -m 0644 {0}.gz {1}'".format(man_file, man_path)
