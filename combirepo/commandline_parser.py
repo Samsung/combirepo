@@ -1,7 +1,7 @@
 #!/usr/bin/env python2.7
 # -*- coding: utf-8 -*-
 import os
-import shutil
+import re
 import argparse
 import sys
 import logging
@@ -13,6 +13,17 @@ import rpm_patcher
 import config_parser
 from repository_pair import RepositoryPair
 import repository_combiner
+
+man_format_remove = re.compile(r'(\\f\w)|(\n\.[A-Z]{2}\n?)')
+
+
+class SmartFormatter(argparse.HelpFormatter):
+    def _split_lines(self, text, width):
+        text = re.sub(man_format_remove, '', text)
+        # this is the RawTextHelpFormatter._split_lines
+        if text.startswith('R|'):
+            return text[2:].splitlines()
+        return argparse.HelpFormatter._split_lines(self, text, width)
 
 
 def convert_list_to_sequential_tuples(flat_list, tuple_length):
@@ -38,9 +49,20 @@ class CommandlineParser():
     """
     def __init__(self):
         """
-        Initializes the parser (does nothing).
+        Initializes the parser and saves arguments for future use if needed
         """
         self._parser = None
+        self._parser_formatter_class = SmartFormatter
+
+    def get_formatted_parser(self, formatter_class):
+        """
+        Create a parser with custom help formatter
+
+        Used to generate man pages
+        """
+        self._parser_formatter_class = formatter_class
+        self.__prepare_parser()
+        return self._parser
 
     def __register_positional_arguments(self):
         """
@@ -86,13 +108,16 @@ class CommandlineParser():
         """
         Registers the options that controll the program run.
         """
-        self._parser.add_argument("-v", "--verbose", action="store_true",
-                                  dest="verbose", default=False,
-                                  help="Enable verbose mode")
-        self._parser.add_argument("-d", "--debug", action="store_true",
-                                  dest="debug", default=False,
-                                  help="Enable debug mode (temporaries "
-                                  "will be saved)")
+        self._parser.add_argument(
+            "-v", "--verbose", action="store_true", dest="verbose",
+            default=False, help="Enable verbose mode: "
+            "Produces a lot of output, usually helps to identify the "
+            "issue root cause if the tool doesn't work as intender.")
+        self._parser.add_argument(
+            "-d", "--debug", action="store_true", dest="debug",
+            default=False, help="R|Enable debug mode (temporaries "
+            "will be saved)\n"
+            "\\fBUSE WITH CAUTION\\fR: produces lots of files")
         self._parser.add_argument("-l", "--logfile", type=str, action="store",
                                   dest="log_file_name", help="Log all output "
                                   "to the given file.")
@@ -104,100 +129,91 @@ class CommandlineParser():
         """
         Registers the options that are related with MIC options.
         """
-        self._parser.add_argument("-A", "--architecture", type=str,
-                                  action="store",
-                                  help="Specify repo architecture "
-                                  "(as for MIC tool)")
-        self._parser.add_argument("-k", "--kickstart-file", type=str,
-                                  action="store", dest="kickstart_file",
-                                  help="Kickstart file used as a template")
-        self._parser.add_argument("-o", "--outdir", type=str, action="store",
-                                  dest="outdir", default=".",
-                                  help="Output directory for MIC.")
-        self._parser.add_argument("-M", "--mic-options", action="append",
-                                  type=str, dest="mic_options",
-                                  help="Additional options for MIC."
-                                  "\nBy default the following options are set:"
-                                  "\n \""
-                                  "sudo mic create loop <YOUR KICKSTART FILE> "
-                                  "\n -A <THE SPECIFIED ARCHITECTURE> "
-                                  "\n -o <THE SPECIFIED OUTPUT DIRECTORY>"
-                                  "\n --tmpfs \n --pkgmgr=zypp \n --shrink\""
-                                  "\n     . You can append options to add "
-                                  "new or change old ones.")
+        self._parser.add_argument(
+            "-A", "--architecture", type=str, action="store",
+            help="Specify repo architecture (in OBS/MIC notation)")
+        self._parser.add_argument(
+            "-k", "--kickstart-file", type=str, action="store",
+            dest="kickstart_file", help="Kickstart file used as a template")
+        self._parser.add_argument(
+            "-o", "--outdir", type=str, action="store", dest="outdir",
+            default=".", help="Output directory for MIC.")
+        self._parser.add_argument(
+            "-M", "--mic-options", action="append", type=str,
+            dest="mic_options", help="R|Additional options for MIC."
+            "\nDefault option set:"
+            "\n"
+            "sudo mic create loop <\\fIKICKSTART_FILE\\fR> \\\\"
+            "\n  -A <\\fIARCH\\fR> -o <\\fIOUTDIR\\fR> "
+            "--tmpfs --pkgmgr=zypp --shrink"
+            "\nOptions are appended or override old ones.")
 
     def __register_special_options(self):
         """
         Registers the options that control specific combirepo behaviour.
         """
-        self._parser.add_argument("-m", "--mirror", action="store_true",
-                                  dest="mirror", default=False,
-                                  help="Whether to mirror"
-                                  " not found marked packages from non-marked "
-                                  "repository")
-        self._parser.add_argument("-g", "--greedy", action="store_true",
-                                  default=False, dest="greedy",
-                                  help="Greedy mode: get"
-                                  " as much packages from marked repository "
-                                  "as possible, and get others from "
-                                  "non-marked repository.")
-        self._parser.add_argument("-P", "--preferring-strategy",
-                                  action="store",
-                                  type=str, dest="prefer_strategy",
-                                  help="Have choice "
-                                  "resolving strategy for the case when there "
-                                  "are packages with equal names but "
-                                  "different commit/build numbers. Possible "
-                                  "values: small (prefer smaller), "
-                                  "big (prefer bigger).")
-        self._parser.add_argument("-u", "--supplementary-repository-url",
-                                  action="store", type=str,
-                                  dest="repository_supplementary_url",
-                                  help="The URL of supplementary repository "
-                                  "that contains RPMs that are not present "
-                                  "in regular repositories that should be "
-                                  "installed to the image.")
+        self._parser.add_argument(
+            "-m", "--mirror", action="store_true", dest="mirror",
+            default=False, help="Whether to mirror not found marked "
+            "packages from non-marked repository")
+        self._parser.add_argument(
+            "-g", "--greedy", action="store_true", default=False,
+            dest="greedy", help="Greedy mode: get as much packages from"
+            "marked repository as possible, and get others from "
+            "non-marked repository.")
+        self._parser.add_argument(
+            "-P", "--preferring-strategy", action="store", type=str,
+            dest="prefer_strategy", help="Have choice resolving strategy "
+            "for the case when there are packages with equal names "
+            "but different commit/build numbers. Possible values: "
+            "\\fBsmall\\fR (prefer smaller number), "
+            "\\fBbig\\fR (prefer bigger number).")
+        self._parser.add_argument(
+            "-u", "--supplementary-repository-url", action="store", type=str,
+            dest="sup_repo_url", help="The URL of "
+            "supplementary repository that contains RPMs that are not present "
+            "in regular repositories that should be installed to the image. "
+            "E.g. for sanitized build this should be a project where "
+            "\\fBlibasan\\fR is built.")
 
     def __register_developer_options(self):
         """
         Registers the options that are used not but usual users, by by
         developers.
         """
-        self._parser.add_argument("--outdir-preliminary-image", type=str,
-                                  action="store", dest="outdir_original",
-                                  default="./.preliminary-image",
-                                  help="Output directory for "
-                                  "MIC (during the preliminary repository "
-                                  "building)")
-        self._parser.add_argument("--preliminary-image", type=str,
-                                  action="store", dest="original_image",
-                                  help="Don't build preliminary "
-                                  "image, use the specified one for that. "
-                                  "Given argument must be the path to image "
-                                  "or images directory.")
-        self._parser.add_argument("--use-custom-qemu", action="store",
-                                  type=str, dest="qemu_path",
-                                  help="Path to qemu that should be "
-                                  "used. You can specify the path either "
-                                  "to RPM package with qemu or to the "
-                                  "working qemu executable itself.")
-        self._parser.add_argument("--cachedir", action="store", type=str,
-                                  dest="cachedir",
-                                  default="/var/tmp/combirepo",
-                                  help="The path to the directory where "
-                                  "combirepo saves its cache.")
-        self._parser.add_argument("--regenerate-repodata",
-                                  action="store_true",
-                                  default=False, dest="regenerate_repodata",
-                                  help="Whether to re-generate the "
-                                  "repodata for specified repositories")
+        self._parser.add_argument(
+            "--outdir-preliminary-image", type=str, action="store",
+            dest="outdir_original", default="./.preliminary-image",
+            help="Output directory for MIC (during the preliminary"
+            "repository building)")
+        self._parser.add_argument(
+            "--preliminary-image", type=str, action="store",
+            dest="original_image", help="Don't build preliminary image, "
+            "use the specified one for that. Given argument must be the path "
+            "to image or images directory.")
+        self._parser.add_argument(
+            "--use-custom-qemu", action="store", type=str, dest="qemu_path",
+            help="Path to qemu that should be used. You can specify the path "
+            "either to RPM package with qemu or to the working qemu "
+            "executable itself.")
+        self._parser.add_argument(
+            "--cachedir", action="store", type=str, dest="cachedir",
+            default="/var/tmp/combirepo", help="The path to the directory "
+            "where combirepo saves its cache.")
+        self._parser.add_argument(
+            "--regenerate-repodata", action="store_true", default=False,
+            dest="regenerate_repodata", help="Whether to re-generate the "
+            "repodata for specified repositories")
 
     def __prepare_parser(self):
         """
         Prepares the parser and registers all its options.
         """
         program_description = "COMBIner of RPM REPOsitories."
-        self._parser = argparse.ArgumentParser(description=program_description)
+        self._parser = argparse.ArgumentParser(
+            description=program_description,
+            formatter_class=self._parser_formatter_class
+            )
         self.__register_positional_arguments()
         self.__register_package_name_options()
         self.__register_program_run_options()
@@ -314,8 +330,8 @@ class CommandlineParser():
         parameters.mirror_mode = arguments.mirror
         if arguments.prefer_strategy is not None:
             parameters.prefer_strategy = arguments.prefer_strategy
-        supplementary_url = arguments.repository_supplementary_url
-        parameters.repository_supplementary_url = supplementary_url
+        supplementary_url = arguments.sup_repo_url
+        parameters.sup_repo_url = supplementary_url
 
         if not os.path.isdir(arguments.cachedir):
             logging.warning("Creating combirepo temporary directory "
@@ -335,3 +351,10 @@ class CommandlineParser():
         repository_combiner.regenerate_repodata = arguments.regenerate_repodata
 
         return parameters
+
+
+def parser_options(formatter_class=argparse.HelpFormatter):
+    """
+    Retrieve a customized parser to generate man page
+    """
+    return CommandlineParser().get_formatted_parser(formatter_class)

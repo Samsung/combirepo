@@ -10,7 +10,7 @@ RUN sed -e 's/arm64/aarch64/;/qemu_arm_string.*aarch64/s/":aarch64:.*"/":aarch64
 
 ENV VERSION=0.1
 RUN mkdir /usr/lib/python2.7/site-packages/
-RUN echo 'export PYTHONPATH=$PYTHONPATH:/usr/lib/python2.7/site-packages/' >> /etc/profile
+RUN echo 'export PYTHONPATH=$PYTHONPATH:/usr/lib/python2.7/site-packages/' | tee -a /etc/profile /etc/bash.bashrc
 
 COPY dist/combirepo-${VERSION}.tar.gz /root/combirepo.tar.gz
 RUN mkdir /root/combirepo/ && tar xf /root/combirepo.tar.gz -C /root/combirepo/ --strip-components=1

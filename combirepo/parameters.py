@@ -27,7 +27,7 @@ class RepositoryCombinerParameters(object):
         """
         self._profile_name = None
         self._temporary_directory_path = None
-        self._repository_supplementary_url = None
+        self._sup_repo_url = None
         self._package_names = {}
         self._repository_pairs = []
         self._architecture = None
@@ -67,18 +67,18 @@ class RepositoryCombinerParameters(object):
         del self._temporary_directory_path
 
     @property
-    def repository_supplementary_url(self):
+    def sup_repo_url(self):
         """The URL of the repository with supplementray packages."""
-        return self._repository_supplementary_url
+        return self._sup_repo_url
 
-    @repository_supplementary_url.setter
-    def repository_supplementary_url(self, value):
+    @sup_repo_url.setter
+    def sup_repo_url(self, value):
         # FIXME: check valid URL.
-        self._repository_supplementary_url = value
+        self._sup_repo_url = value
 
-    @repository_supplementary_url.deleter
-    def repository_supplementary_url(self):
-        del self._repository_supplementary_url
+    @sup_repo_url.deleter
+    def sup_repo_url(self):
+        del self._sup_repo_url
 
     @property
     def package_names(self):
@@ -275,11 +275,11 @@ class RepositoryCombinerParameters(object):
             path = properties.temporary_directory_path
             self.__warn_about_merging_strategy(path)
 
-        if self._repository_supplementary_url is None:
-            url = properties.repository_supplementary_url
-            self._repository_supplementary_url = url
-        elif properties.repository_supplementary_url is not None:
-            url = properties.repository_supplementary_url
+        if self._sup_repo_url is None:
+            url = properties.sup_repo_url
+            self._sup_repo_url = url
+        elif properties.sup_repo_url is not None:
+            url = properties.sup_repo_url
             self.__warn_about_merging_strategy(url)
 
         if len(self._package_names.keys()) == 0:
