@@ -8,6 +8,7 @@ from distutils.errors import DistutilsOptionError
 from distutils.command.build import build
 import argparse
 import re as _re
+from os import path, mkdir
 
 AUTO_BUILD = True
 
@@ -29,6 +30,14 @@ Combination of
 .IR \(lqrepository_name\ original_path\ marked_path\(rq \\fR
 used for mapping marked repositories to original ones
 """
+
+
+def check_data_dir():
+    data_dir = path.join(path.dirname(path.abspath(__file__)),
+                         "combirepo", "data")
+    if not path.exists(data_dir):
+        mkdir(data_dir)
+    return data_dir
 
 
 class BuildManPage(Command):
@@ -82,7 +91,7 @@ class BuildManPage(Command):
                                ext_sections=sections)
 
         m = mpf.format_man_page(self._parser)
-
+        check_data_dir()
         with open(self.output, 'w') as f:
             f.write(m)
 
