@@ -52,11 +52,11 @@ class RpmPatcher():
         """
         logging.debug("Searching in directory "
                       "{0}".format(self.images_directory))
+        if not os.path.isdir(self.images_directory):
+            raise Exception("{0} is not a "
+                            "directory!".format(self.images_directory))
         images = files.find_fast(self.images_directory, ".*\.img$")
 
-        if len(images) == 0:
-            logging.error("No images were found.")
-            sys.exit("Error.")
         return images
 
     def __mount_images_triplet(self, images, directory):
@@ -155,13 +155,8 @@ class RpmPatcher():
         else:
             qemu_packages.append(qemu_package)
 
-        os.chdir(self.patching_root)
         for package in qemu_packages:
-            result = hidden_subprocess.call(["unrpm", package])
-            if result != 0:
-                logging.error("Failed to unpack package.")
-                sys.exit("Error.")
-        os.chdir(initial_directory)
+            files.unrpm(package, self.patching_root)
 
     def __find_qemu_executable(self):
         """
@@ -229,7 +224,6 @@ class RpmPatcher():
         """
         os.chroot(self.patching_root)
         os.chdir("/")
-        hidden_subprocess.call(["tar", "xf", "rpmrebuild.tar"])
         os.chdir("/rpmrebuild/src")
         hidden_subprocess.call(["make"])
         hidden_subprocess.call(["make", "install"])
@@ -242,6 +236,9 @@ class RpmPatcher():
         """
         self.__prepare_image()
         images = self.__find_platform_images()
+        if len(images) == 0:
+            logging.error("No images were found.")
+            sys.exit("Error.")
         self.patching_root = temporaries.create_temporary_directory("root")
 
         # For all-in-one images:
@@ -260,12 +257,17 @@ class RpmPatcher():
         if self.architecture not in host_arches:
             self.__deploy_qemu_package()
 
-        working_directory = os.path.join(self.patching_root, "rpmrebuild")
         combirepo_dir = os.path.abspath(os.path.dirname(__file__))
         rpmrebuild_file = os.path.join(combirepo_dir, 'data/rpmrebuild.tar')
-        if os.path.isdir(working_directory):
-            shutil.rmtree(working_directory)
-        shutil.copy(rpmrebuild_file, working_directory)
+        already_present_rpmrebuilds = files.find_fast(self.patching_root,
+                                                      "rpmrebuild.*")
+        for already_present_rpmrebuild in already_present_rpmrebuilds:
+            if os.path.isdir(already_present_rpmrebuild):
+                shutil.rmtree(already_present_rpmrebuild)
+            elif os.path.isfile(already_present_rpmrebuild):
+                os.remove(already_present_rpmrebuild)
+        hidden_subprocess.call(["tar", "xf", rpmrebuild_file, "-C",
+                               self.patching_root])
 
         queue = multiprocessing.Queue()
         child = multiprocessing.Process(target=self.__install_rpmrebuild,
@@ -376,7 +378,10 @@ class RpmPatcher():
         global developer_original_image
         global developer_outdir_original
         self.images_directory = developer_outdir_original
-        if self.__find_platform_images() is not None:
+        if not os.path.isdir(developer_outdir_original):
+            os.makedirs(developer_outdir_original)
+        if (self.__find_platform_images() is not None and
+                len(self.__find_platform_images()) > 0):
             return
 
         if developer_original_image is None:

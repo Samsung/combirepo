@@ -8,14 +8,14 @@ import repository_combiner
 
 def main(args=None):
     commandline_parser = CommandlineParser()
-    commandline_properties = commandline_parser.parse()
+    commandline_parameters = commandline_parser.parse()
     config_parser = ConfigParser()
     if os.path.isfile(config_parser.path):
-        config_properties = config_parser.parse()
-        properties = config_properties + commandline_properties
+        config_parameters = config_parser.parse()
+        parameters = config_parameters + commandline_parameters
     else:
-        properties = commandline_properties
-    repository_combiner.combine(properties)
+        parameters = commandline_parameters
+    repository_combiner.combine(parameters)
 
 
 if __name__ == '__main__':

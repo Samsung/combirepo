@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 import re
 import logging
+import urlparse
 
 
 def split_names_list(names):
@@ -64,3 +65,17 @@ def is_ascii_string(string):
         return False
     else:
         return True
+
+
+def is_url_string(string):
+    """
+    Checks whether the given string is a URL string.
+
+    @param string   The string to be checked.
+    @return         True, if it is a valid URL string, false otherwise.
+    """
+    url_parsed = urlparse.urlparse(string)
+    if url_parsed is None:
+        return False
+    else:
+        return bool(url_parsed.scheme)

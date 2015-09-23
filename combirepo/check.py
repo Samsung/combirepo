@@ -21,7 +21,7 @@ def command_exists(command):
     logging.debug("Checking command \"{0}\"".format(command))
     try:
         DEV_NULL = open(os.devnull, 'w')
-        subprocess.call([command], stdout=DEV_NULL, stderr=DEV_NULL)
+        subprocess.call([command, "--help"], stdout=DEV_NULL, stderr=DEV_NULL)
     except OSError as error:
         if os.path.isfile(command):
             logging.error("File {0} cannot be executed.".format(command))
@@ -83,10 +83,24 @@ def valid_ascii_string(string):
     Checks whether the given string is a valid ASCII string and aborts the
     program in the case of failure.
 
-    @param string       Teh string to be checked.
+    @param string       The string to be checked.
     """
     if string is None:
         raise Exception("Argument {0} is None!".format(string))
     if not strings.is_ascii_string(string):
         logging.error("String {0} is not an ASCII string!".format(string))
+        sys.exit("Error.")
+
+
+def valid_url_string(string):
+    """
+    Checks whether the given string is a valid URL address and aborts the
+    program in the case of failure.
+
+    @param string       The string to be checked.
+    """
+    if string is None:
+        raise Exception("Argument {0} is None!".format(string))
+    if not strings.is_url_string(string):
+        logging.error("String {0} is not a URL string!".format(string))
         sys.exit("Error.")

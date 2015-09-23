@@ -59,9 +59,8 @@ class RepositoryPair(object):
         if os.path.isdir(value):
             self._url = os.path.abspath(value)
         else:
-            # FIXME: check valid URL.
-            raise Exception("URL repository locations not implemented yet! "
-                            "{0}".format(value))
+            check.valid_url_string(value)
+            self._url = value
 
     @url.deleter
     def url(self):
@@ -77,9 +76,8 @@ class RepositoryPair(object):
         if os.path.isdir(value):
             self._url_marked = os.path.abspath(value)
         else:
-            # FIXME: check valid URL.
-            raise Exception("URL repository locations not implemented yet! "
-                            "{0}".format(value))
+            check.valid_url_string(value)
+            self._url_marked = value
 
     @url_marked.deleter
     def url_marked(self):
