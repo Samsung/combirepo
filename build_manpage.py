@@ -135,9 +135,9 @@ class ManPageFormatter(argparse.HelpFormatter):
                  authors=None,
                  ):
 
-        super(ManPageFormatter, self).__init__(prog)
+        super(ManPageFormatter, self).__init__("combirepo")
 
-        self._prog = prog
+        self._prog = "combirepo"
         self._section = 1
         self._today = datetime.date.today().strftime('%Y\\-%m\\-%d')
         self._desc = desc
