@@ -96,14 +96,8 @@ class RepositoryData():
         package_groups_package = os.path.abspath(package_groups_package)
         directory_unpacking = temporaries.create_temporary_directory("groups")
         initial_directory = os.getcwd()
-        os.chdir(directory_unpacking)
-        groups = None
-        patterns = None
-        num_groups_files = 0
-        num_patterns_files = 0
-        hidden_subprocess.call(["unrpm", package_groups_package])
+        files.unrpm(package_groups_package, directory_unpacking)
         self.find_in_directory(directory_unpacking)
-        os.chdir(initial_directory)
 
 
 class Repository(object):

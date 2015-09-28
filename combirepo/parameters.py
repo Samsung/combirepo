@@ -257,91 +257,91 @@ class RepositoryCombinerParameters(object):
                                    "   ignored!")
         logging.warning("".join(warning_message))
 
-    def __add__(self, properties):
+    def __add__(self, parameters):
         """
-        Merges two properties structure in the sence that second has bigger
+        Merges two parameters structure in the sence that second has bigger
         priority.
 
-        @param properties       The second properties structure.
-        @return                 The merged properties structure.
+        @param parameters       The second parameters structure.
+        @return                 The merged parameters structure.
         """
-        if properties.profile_name is not None:
-            self._profile_name = properties.profile_name
+        if parameters.profile_name is not None:
+            self._profile_name = parameters.profile_name
 
         if self._temporary_directory_path is None:
-            path = properties.temporary_directory_path
+            path = parameters.temporary_directory_path
             self._temporary_directory_path = path
-        elif properties.temporary_directory_path is not None:
-            path = properties.temporary_directory_path
+        elif parameters.temporary_directory_path is not None:
+            path = parameters.temporary_directory_path
             self.__warn_about_merging_strategy(path)
 
         if self._sup_repo_url is None:
-            url = properties.sup_repo_url
+            url = parameters.sup_repo_url
             self._sup_repo_url = url
-        elif properties.sup_repo_url is not None:
-            url = properties.sup_repo_url
+        elif parameters.sup_repo_url is not None:
+            url = parameters.sup_repo_url
             self.__warn_about_merging_strategy(url)
 
         if len(self._package_names.keys()) == 0:
-            self._package_names = properties.package_names
+            self._package_names = parameters.package_names
         elif len(self._package_names.keys()) > 0:
             length_total = 0
             for key in self._package_names.keys():
                 length_total = length_total + len(self._package_names[key])
             if length_total > 0:
                 length_total = 0
-                for key in properties.package_names.keys():
+                for key in parameters.package_names.keys():
                     length_total = (length_total +
-                                    len(properties.package_names[key]))
+                                    len(parameters.package_names[key]))
                 if length_total > 0:
-                    package_names = properties.package_names
+                    package_names = parameters.package_names
                     self.__warn_about_merging_strategy(package_names)
             else:
-                self._package_names = properties.package_names
+                self._package_names = parameters.package_names
 
         if len(self._repository_pairs) == 0:
-            self._repository_pairs = properties.repository_pairs
-        elif len(properties.repository_pairs) > 0:
-            self.__warn_about_merging_strategy(properties.repository_pairs)
+            self._repository_pairs = parameters.repository_pairs
+        elif len(parameters.repository_pairs) > 0:
+            self.__warn_about_merging_strategy(parameters.repository_pairs)
 
         if self._architecture is None:
-            self._architecture = properties.architecture
-        elif (properties.architecture is not None and
-                properties.architecture != self._architecture):
-            self.__warn_about_merging_strategy(properties.architecture)
+            self._architecture = parameters.architecture
+        elif (parameters.architecture is not None and
+                parameters.architecture != self._architecture):
+            self.__warn_about_merging_strategy(parameters.architecture)
 
         if self._kickstart_file_path is None:
-            self._kickstart_file_path = properties.kickstart_file_path
-        elif (properties.kickstart_file_path is not None and
-                (properties.kickstart_file_path != self._kickstart_file_path)):
-            self.__warn_about_merging_strategy(properties.kickstart_file_path)
+            self._kickstart_file_path = parameters.kickstart_file_path
+        elif (parameters.kickstart_file_path is not None and
+                (parameters.kickstart_file_path != self._kickstart_file_path)):
+            self.__warn_about_merging_strategy(parameters.kickstart_file_path)
 
         if self._output_directory_path is None:
-            self._output_directory_path = properties.output_directory_path
-        elif (properties.output_directory_path is not None and
-                (properties.output_directory_path
+            self._output_directory_path = parameters.output_directory_path
+        elif (parameters.output_directory_path is not None and
+                (parameters.output_directory_path
                     != self._output_directory_path)):
-            path = properties.output_directory_path
+            path = parameters.output_directory_path
             self.__warn_about_merging_strategy(path)
 
         if len(self._mic_options) == 0:
-            self._mic_options = properties.mic_options
-        elif properties.mic_options is not None:
-            self.__warn_about_merging_strategy(properties.mic_options)
+            self._mic_options = parameters.mic_options
+        elif parameters.mic_options is not None:
+            self.__warn_about_merging_strategy(parameters.mic_options)
 
         if not self._greedy_mode:
-            self._greedy_mode = properties.greedy_mode
-        elif properties.greedy_mode:
+            self._greedy_mode = parameters.greedy_mode
+        elif parameters.greedy_mode:
             self.__warn_about_merging_strategy("greedy = 1")
 
         if not self._mirror_mode:
-            self._mirror_mode = properties.mirror_mode
-        elif properties.mirror_mode:
+            self._mirror_mode = parameters.mirror_mode
+        elif parameters.mirror_mode:
             self.__warn_about_merging_strategy("mirror = 1")
 
         if self._prefer_strategy is None:
-            self._prefer_strategy = properties.prefer_strategy
-        elif properties.prefer_strategy:
-            self.__warn_about_merging_strategy(properties.prefer_strategy)
+            self._prefer_strategy = parameters.prefer_strategy
+        elif parameters.prefer_strategy:
+            self.__warn_about_merging_strategy(parameters.prefer_strategy)
 
         return self

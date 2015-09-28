@@ -302,7 +302,7 @@ class DependencyGraphBuilder():
     parser. Based on repo-graph.py from yum-utils.
     """
 
-    def __init__(self):
+    def __init__(self, package_name_checking_function):
         """
         Initializes the dependency graph builder (does nothing).
         """
@@ -310,6 +310,7 @@ class DependencyGraphBuilder():
         self.arch = None
         self.preferables = []
         self.strategy = None
+        self.name_checking_function = package_name_checking_function
         logging.debug("Initializing dependency graph builder...")
 
     def build_graph(self, repository_path, arch, preferables, strategy):
@@ -487,11 +488,16 @@ class DependencyGraphBuilder():
         versions = []
         releases = []
         for package in packages:
-            logging.debug("Processing package {0}".format(package))
+            full_name = _get_full_package_name(package)
+            logging.debug("Processing package {0} with full name "
+                          "{1}".format(package, full_name))
+            if self.name_checking_function is not None:
+                logging.debug("Check with name function...")
+                if not self.name_checking_function(full_name):
+                    continue
             dependency_graph.set_name_id(package.name, i)
             back_dependency_graph.set_name_id(package.name, i)
             names.append(package.name)
-            full_name = _get_full_package_name(package)
             full_names.append(full_name)
             location = self.__find_package_location(package)
             # We should not include "dontuse" rpms to index at all, so delete

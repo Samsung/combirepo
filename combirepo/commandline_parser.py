@@ -5,6 +5,7 @@ import re
 import argparse
 import sys
 import logging
+import atexit
 import temporaries
 import hidden_subprocess
 from strings import split_names_list
@@ -13,6 +14,7 @@ import rpm_patcher
 import config_parser
 from repository_pair import RepositoryPair
 import repository_combiner
+import files
 
 man_format_remove = re.compile(r'(\\f\w)|(\n\.[A-Z]{2}\n?)')
 
@@ -183,7 +185,8 @@ class CommandlineParser():
         """
         self._parser.add_argument(
             "--outdir-preliminary-image", type=str, action="store",
-            dest="outdir_original", default="./.preliminary-image",
+            dest="outdir_original",
+            default="/var/tmp/combirepo/preliminary-image",
             help="Output directory for MIC (during the preliminary"
             "repository building)")
         self._parser.add_argument(
@@ -345,10 +348,12 @@ class CommandlineParser():
 
         # Process developer options related with RPM patcher:
         rpm_patcher.developer_outdir_original = arguments.outdir_original
+        atexit.register(files.safe_rmtree, arguments.outdir_original)
         rpm_patcher.developer_original_image = arguments.original_image
         rpm_patcher.developer_qemu_path = arguments.qemu_path
 
-        repository_combiner.regenerate_repodata = arguments.regenerate_repodata
+        if_regenerate = arguments.regenerate_repodata
+        repository_combiner.repodata_regeneration_enabled = if_regenerate
 
         return parameters
 

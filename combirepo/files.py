@@ -1,10 +1,12 @@
 #!/usr/bin/env python2.7
 # -*- coding: utf-8 -*-
 import os
+import shutil
 import sys
 import logging
 import re
 import check
+import hidden_subprocess
 
 
 def find_fast(directory, expression):
@@ -47,3 +49,34 @@ def create_symlink(package_name, location_from, directory_to):
     logging.debug("Creating symlink from {0} to {1}".format(location_from,
                                                             location_to))
     os.symlink(location_from, location_to)
+
+
+def unrpm(rpm_path, destination_path):
+    """
+    Unpacks the RPM package from the given location to the given directory.
+
+    @param rpm_path             The path to the RPM file.
+    @param destination_path     The path to the destination directory.
+    """
+    check.file_exists(rpm_path)
+    check.directory_exists(destination_path)
+    if not rpm_path.endswith(".rpm"):
+        logging.error("Given file {0} is not an RPM package!".format(rpm_path))
+    initial_directory = os.getcwd()
+    os.chdir(destination_path)
+    hidden_subprocess.pipe_call(["rpm2cpio", rpm_path],
+                                ["cpio", "--extract", "--unconditional",
+                                 "--preserve-modification-time",
+                                 "--make-directories"])
+    os.chdir(initial_directory)
+
+
+def safe_rmtree(path):
+    """
+    Removes the directory safely, i. e. does not raise exception in case when
+    the directory does not exit.
+
+    @param path     The path to the directory.
+    """
+    if os.path.isdir(path):
+        shutil.rmtree(path)

@@ -79,3 +79,40 @@ def call(commandline):
                 logging.error("{0}".format(log_file.read()))
 
     return code
+
+
+def pipe_call(commandline_from, commandline_to):
+    """
+    Calls two commands redirecting the output of first command to the second
+    one.
+
+    @param commandline_from     The first command.
+    @param commandline_to       The second command.
+    """
+    code = 0
+    global counter
+    counter = 1
+    logging.info("Running the command: {0} | "
+                 "{1}".format(" ".join(commandline_from),
+                              " ".join(commandline_to)))
+    logging.debug("       in the directory {0}".format(os.getcwd()))
+    log_file_name = temporaries.create_temporary_file("process.log")
+
+    timer = RepeatingTimer(1.0, progress_bar_print)
+    timer.daemon = True
+    timer.start()
+
+    global visible_mode
+    first = subprocess.Popen(commandline_from, stdout=subprocess.PIPE)
+    second = subprocess.Popen(commandline_to, stdin=first.stdout,
+                              stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE)
+    # Allow first to receive a SIGPIPE if second exits:
+    first.stdout.close()
+    output, errors = second.communicate()
+    with open(log_file_name, 'w') as log_file:
+        log_file.write(output)
+        log_file.write(errors)
+
+    timer.cancel()
+    sys.stdout.write("\n")
