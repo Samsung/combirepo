@@ -57,6 +57,8 @@ class LinkListingHTMLParser(HTMLParser):
                 if key == 'href':
                     if not value:
                         continue
+                    if value == "..":
+                        continue
                     value = resolve_link(value, self.__url)
                     self.links.add(value)
                     break

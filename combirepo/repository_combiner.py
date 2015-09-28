@@ -112,7 +112,7 @@ def construct_combined_repository(graph, marked_graph, marked_packages,
 
         package_id = graph.get_name_id(package)
         if package_id is None:
-            files.create_symlink(package, location_from, repository_path)
+            shutil.copy(location_from, repository_path)
         else:
             version = graph.vs[package_id]["version"]
             if version != version_marked:
@@ -130,7 +130,7 @@ def construct_combined_repository(graph, marked_graph, marked_packages,
                                                  release_marked))
                 rpm_patcher.patch(location_from, repository_path, release)
             else:
-                files.create_symlink(package, location_from, repository_path)
+                shutil.copy(location_from, repository_path)
 
     if len(packages_not_found) != 0:
         for package in packages_not_found:
@@ -150,7 +150,7 @@ def construct_combined_repository(graph, marked_graph, marked_packages,
                 continue
         package_id = graph.get_name_id(package)
         location_from = graph.vs[package_id]["location"]
-        files.create_symlink(package, location_from, repository_path)
+        shutil.copy(location_from, repository_path)
 
     if logging.getLogger().getEffectiveLevel() == logging.DEBUG:
         hidden_subprocess.call(["ls", "-l", repository_path])
@@ -408,7 +408,7 @@ def check_rpm_name(rpm_name):
             return True
         # Not all RPMs should be downloaded:
         else:
-            file_name = url.split('/')[-1].split('#')[0].split('?')[0]
+            file_name = rpm_name.split('/')[-1].split('#')[0].split('?')[0]
     # The only other case when we process the file is the existing file in the
     # filesystem:
     elif os.path.isfile(rpm_name):
@@ -434,6 +434,7 @@ def check_rpm_name(rpm_name):
 
     (name, version, release, epoch, architecture) = components
     if not architecture in [target_arhcitecture, "noarch"]:
+        logging.debug("Target architecture is {0}".format(target_arhcitecture))
         logging.debug("It is indended for another architecture, skipping...")
         return False
     elif "debuginfo" in name or "debugsource" in name:
@@ -484,6 +485,8 @@ def combine(parameters):
 
     @param parameters   The parameters of combirepo run.
     """
+    global target_arhcitecture
+    target_arhcitecture = parameters.architecture
     prepare_repositories(parameters.repository_pairs,
                          parameters.kickstart_file_path,
                          parameters.temporary_directory_path)
@@ -499,8 +502,6 @@ def combine(parameters):
                                      original_repositories,
                                      parameters.architecture,
                                      parameters.kickstart_file_path)
-    global target_arhcitecture
-    target_arhcitecture = parameters.architecture
     patcher.prepare()
     combined_repositories = construct_combined_repositories(parameters,
                                                             patcher)
