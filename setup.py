@@ -6,7 +6,7 @@ from setuptools.command.sdist import sdist
 from setuptools.command.install import install
 from setuptools.py31compat import get_config_vars
 from subprocess import call
-from os import path
+from os import path, makedirs
 from build_manpage import BuildManPage, check_data_dir
 import shlex
 
@@ -30,16 +30,22 @@ class CustomInstallCommand(install):
     """Customized sdist - packages rpmrebuild into tarball"""
     def run(self):
         install.run(self)
-        prefix = get_config_vars('prefix')[0]
-        data_dir = check_data_dir()
+
+        instcmd = self.get_finalized_command('install')
+        root = instcmd.root
+        prefix = path.abspath(get_config_vars('prefix')[0])
+        data_dir = path.abspath(check_data_dir())
         man_file = path.join(data_dir, "combirepo.1")
+
         if not path.exists(man_file):
             self.run_command('build_manpage')
+        man_path = path.abspath('{0}/{1}/share/man/man1/'.format(root, prefix))
+        if not path.exists(man_path):
+            makedirs(man_path)
 
-        man_path = '{0}/share/man/man1/'.format(prefix)
         print "Installing man page into {0}".format(man_path)
         cmd = "bash -c 'gzip {0} \
-               && install -m 0644 {0}.gz {1}'".format(man_file, man_path)
+               && install -m 0644 {0}.gz {1}/'".format(man_file, man_path)
         args = shlex.split(cmd)
         call(args)
 
