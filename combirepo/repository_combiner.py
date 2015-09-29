@@ -148,6 +148,8 @@ def construct_combined_repository(graph, marked_graph, marked_packages,
         if package in marked_packages:
             if package not in packages_not_found:
                 continue
+        logging.info("Package {0} from original repository will be "
+                     "used.".format(package))
         package_id = graph.get_name_id(package)
         location_from = graph.vs[package_id]["location"]
         shutil.copy(location_from, repository_path)
@@ -445,21 +447,92 @@ def check_rpm_name(rpm_name):
         return True
 
 
+def get_kickstart_from_repos(repository_pairs, kickstart_substring):
+    """
+    Gets kickstart files from repositories that are used during the build.
+
+    @param repository_pairs     The repository pairs used during the image
+                                building.
+    @param kickstart_substring  The substring that specifies the substring of
+                                kickstart file name to be used.
+    """
+    if kickstart_substring is None:
+        kickstart_substring = ""
+    image_configurations_rpms = {}
+    for repository_pair in repository_pairs:
+        path = repository_pair.url
+        rpms = files.find_fast(path, "image-configurations-.*\.rpm")
+        image_configurations_rpms[repository_pair.name] = rpms
+    logging.debug("Found following image-configurations RPMs: "
+                  "{0}".format(image_configurations_rpms))
+
+    kickstart_file_paths = {}
+    for key in image_configurations_rpms.keys():
+        for rpm in image_configurations_rpms[key]:
+            directory_path = temporaries.create_temporary_directory("unpack")
+            files.unrpm(rpm, directory_path)
+            kickstart_file_paths[key] = files.find_fast(directory_path,
+                                                        ".*.ks")
+    logging.info("Found following kickstart files:")
+    all_kickstart_file_paths = []
+    for key in kickstart_file_paths.keys():
+        logging.info(" * in repository {0}:".format(key))
+        for kickstart_file_path in kickstart_file_paths[key]:
+            basename = os.path.basename(kickstart_file_path)
+            all_kickstart_file_paths.append(kickstart_file_path)
+            logging.info("    * {0}".format(basename))
+        if len(kickstart_file_paths[key]) == 0:
+            logging.info("    <no kickstart files in this repository>")
+    logging.debug("Found files: {0}".format(all_kickstart_file_paths))
+    helper_string = "use option -k for that or \"kickstart = ...\" in config"
+    kickstart_file_path_resulting = None
+    if len(all_kickstart_file_paths) > 1:
+        matching_kickstart_file_paths = []
+        for kickstart_file_path in all_kickstart_file_paths:
+            basename = os.path.basename(kickstart_file_path)
+            if kickstart_substring in basename:
+                matching_kickstart_file_paths.append(kickstart_file_path)
+        if len(matching_kickstart_file_paths) > 1:
+            logging.error("More than one kickstart files satisfy the "
+                          "substring, or no substring was specified!")
+            for kickstart_file_path in matching_kickstart_file_paths:
+                basename = os.path.basename(kickstart_file_path)
+                logging.error(" * {0}".format(basename))
+            logging.error("Please, specified the unique name of kickstart "
+                          "file or the unique substring! "
+                          "({0}).".format(helper_string))
+            sys.exit("Error.")
+        else:
+            kickstart_file_path_resulting = matching_kickstart_file_paths[0]
+    elif len(all_kickstart_file_paths) == 1:
+        kickstart_file_path_resulting = all_kickstart_file_paths[0]
+    else:
+        logging.error("No kickstart files found in repositories, please "
+                      "specify the path to kickstart file manually! "
+                      "({0}).".format(helper_string))
+        sys.exit("Error.")
+    return kickstart_file_path_resulting
+
+
 def prepare_repositories(repository_pairs, kickstart_file_path,
                          cache_directory_path):
     """
     Prepares repository pairs for use.
 
     @param repository_pairs     The list of repository pairs.
-    @param kickstart_file_path  The path to the used kickstart file.
+    @param kickstart_file_path  The path to kickstart ot substring of its name.
     @param cache_directory_path The path to the combirepo cache directory.
+    @return                     The path to the used kickstart file.
     """
     if len(repository_pairs) == 0:
         raise Exception("No repository pairs given!")
     # Check that user has given correct arguments for repository names:
     names = [repository_pair.name for repository_pair in repository_pairs]
     logging.debug("Repository names: {0}".format(names))
-    check_repository_names(names, kickstart_file_path)
+    if kickstart_file_path is not None and os.path.isfile(kickstart_file_path):
+        logging.info("Kickstart file {0} specified by user will be "
+                     "used".format(kickstart_file_path))
+        check_repository_names(names, kickstart_file_path)
 
     repository_cache_directory_path = os.path.join(cache_directory_path,
                                                    "repositories")
@@ -477,6 +550,13 @@ def prepare_repositories(repository_pairs, kickstart_file_path,
         for repository_pair in parameters.repository_pairs:
             regenerate_repodata(repository_pair.url,
                                 repository_pair.url_marked)
+    if kickstart_file_path is None or not os.path.isfile(kickstart_file_path):
+        kickstart_file_path = get_kickstart_from_repos(repository_pairs,
+                                                       kickstart_file_path)
+        check_repository_names(names, kickstart_file_path)
+    logging.info("The following kickstart file will be used: "
+                 "{0}".format(kickstart_file_path))
+    return kickstart_file_path
 
 
 def combine(parameters):
@@ -487,9 +567,10 @@ def combine(parameters):
     """
     global target_arhcitecture
     target_arhcitecture = parameters.architecture
-    prepare_repositories(parameters.repository_pairs,
-                         parameters.kickstart_file_path,
-                         parameters.temporary_directory_path)
+    kickstart_path = prepare_repositories(parameters.repository_pairs,
+                                          parameters.kickstart_file_path,
+                                          parameters.temporary_directory_path)
+    parameters.kickstart_file_path = kickstart_path
     initialize()
 
     original_repositories = [repository_pair.url for repository_pair
