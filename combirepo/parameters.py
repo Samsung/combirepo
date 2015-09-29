@@ -73,8 +73,11 @@ class RepositoryCombinerParameters(object):
 
     @sup_repo_url.setter
     def sup_repo_url(self, value):
-        # FIXME: check valid URL.
-        self._sup_repo_url = value
+        if os.path.isdir(value):
+            self._sup_repo_url = os.path.abspath(value)
+        else:
+            check.valid_url_string(value)
+            self._sup_repo_url = value
 
     @sup_repo_url.deleter
     def sup_repo_url(self):

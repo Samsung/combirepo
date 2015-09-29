@@ -333,8 +333,8 @@ class CommandlineParser():
         parameters.mirror_mode = arguments.mirror
         if arguments.prefer_strategy is not None:
             parameters.prefer_strategy = arguments.prefer_strategy
-        supplementary_url = arguments.sup_repo_url
-        parameters.sup_repo_url = supplementary_url
+        if arguments.sup_repo_url is not None:
+            parameters.sup_repo_url = arguments.sup_repo_url
 
         if not os.path.isdir(arguments.cachedir):
             logging.warning("Creating combirepo temporary directory "

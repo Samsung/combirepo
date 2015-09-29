@@ -148,8 +148,9 @@ def construct_combined_repository(graph, marked_graph, marked_packages,
         if package in marked_packages:
             if package not in packages_not_found:
                 continue
-        logging.info("Package {0} from original repository will be "
-                     "used.".format(package))
+        if package in packages_not_found:
+            logging.info("Package {0} from original repository will be "
+                         "used.".format(package))
         package_id = graph.get_name_id(package)
         location_from = graph.vs[package_id]["location"]
         shutil.copy(location_from, repository_path)
@@ -514,16 +515,17 @@ def get_kickstart_from_repos(repository_pairs, kickstart_substring):
     return kickstart_file_path_resulting
 
 
-def prepare_repositories(repository_pairs, kickstart_file_path,
-                         cache_directory_path):
+def prepare_repositories(parameters):
     """
     Prepares repository pairs for use.
 
-    @param repository_pairs     The list of repository pairs.
-    @param kickstart_file_path  The path to kickstart ot substring of its name.
-    @param cache_directory_path The path to the combirepo cache directory.
+    @param parameters           The combirepo run-time parameters (for
+                                explanation, see combirepo/parameters.py).
     @return                     The path to the used kickstart file.
     """
+    repository_pairs = parameters.repository_pairs
+    kickstart_file_path = parameters.kickstart_file_path
+    cache_directory_path = parameters.temporary_directory_path
     if len(repository_pairs) == 0:
         raise Exception("No repository pairs given!")
     # Check that user has given correct arguments for repository names:
@@ -540,6 +542,8 @@ def prepare_repositories(repository_pairs, kickstart_file_path,
         os.mkdir(repository_cache_directory_path)
     repository_manager = RepositoryManager(repository_cache_directory_path,
                                            check_rpm_name)
+    path = repository_manager.prepare(parameters.sup_repo_url)
+    parameters.sup_repo_url = path
     for repository_pair in repository_pairs:
         path = repository_manager.prepare(repository_pair.url)
         repository_pair.url = path
@@ -567,10 +571,7 @@ def combine(parameters):
     """
     global target_arhcitecture
     target_arhcitecture = parameters.architecture
-    kickstart_path = prepare_repositories(parameters.repository_pairs,
-                                          parameters.kickstart_file_path,
-                                          parameters.temporary_directory_path)
-    parameters.kickstart_file_path = kickstart_path
+    parameters.kickstart_file_path = prepare_repositories(parameters)
     initialize()
 
     original_repositories = [repository_pair.url for repository_pair
@@ -590,6 +591,13 @@ def combine(parameters):
     if parameters.mic_options is list:
         mic_options.extend(args.mic_options)
     hidden_subprocess.visible_mode = True
+
+    ks_modified_path = temporaries.create_temporary_file("mod.ks")
+    shutil.copy(parameters.kickstart_file_path, ks_modified_path)
+    kickstart_file = KickstartFile(ks_modified_path)
+    kickstart_file.add_repository_path("supplementary",
+                                       parameters.sup_repo_url)
+    parameters.kickstart_file_path = ks_modified_path
     create_image(parameters.architecture, names, combined_repositories,
                  parameters.kickstart_file_path,
                  parameters.output_directory_path,

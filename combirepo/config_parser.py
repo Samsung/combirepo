@@ -169,9 +169,10 @@ class ConfigParser():
                       "{0}".format(profile_name))
         self.__check_option_exists(profile_name, "repos")
         repository_aliases = self.__get_list(profile_name, "repos")
-        supplementary_url = self.__get_list(profile_name,
-                                            "repo_supplementary")
-        parameters.sup_repo_url = supplementary_url
+
+        if self.parser.has_option(profile_name, "repo_supplementary"):
+            parameters.sup_repo_url = self.parser.get(profile_name,
+                                                      "repo_supplementary")
 
         if self.parser.has_option(profile_name, "architecture"):
             parameters.architecture = self.parser.get(profile_name,
