@@ -302,15 +302,26 @@ class DependencyGraphBuilder():
     parser. Based on repo-graph.py from yum-utils.
     """
 
-    def __init__(self, package_name_checking_function):
+    def __init__(self, package_name_checking_function, packages=None):
         """
         Initializes the dependency graph builder (does nothing).
+
+        @param package_name_checking_function   The function that is used as a
+                                                filter to manage packages that
+                                                should be removed from the
+                                                dependency graph.
+        @param packages                         The list of packages names
+                                                that should present in the
+                                                graph with all their
+                                                dependencies.
         """
         self.repository_path = None
         self.arch = None
         self.preferables = []
         self.strategy = None
         self.name_checking_function = package_name_checking_function
+        self.packages = packages
+        self.preferables.extend(self.packages)
         logging.debug("Initializing dependency graph builder...")
 
     def build_graph(self, repository_path, arch, preferables, strategy):
@@ -521,7 +532,12 @@ class DependencyGraphBuilder():
 
         edges = []
         back_edges = []
+        if self.packages is None or len(self.packages) == 0:
+            self.packages = yum_sack.returnPackages()
+        packages_scope = Set(self.packages)
         for package in yum_sack.returnPackages():
+            if package.name not in packages_scope:
+                continue
             result = _search_dependencies(yum_sack, package, providers,
                                           self.preferables, self.strategy)
             dependencies = result[0]
@@ -538,6 +554,9 @@ class DependencyGraphBuilder():
                 id_end = dependency_graph.get_name_id(dependency)
                 edges.append((id_begin, id_end))
                 back_edges.append((id_end, id_begin))
+                if dependency not in self.packages:
+                    packages_scope = packages_scope | Set([dependency])
+            packages_scope = packages_scope - Set([package.name])
 
         dependency_graph.add_edges(edges)
         back_dependency_graph.add_edges(back_edges)

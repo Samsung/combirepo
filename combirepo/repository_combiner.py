@@ -12,6 +12,8 @@ import urlparse
 import hidden_subprocess
 import multiprocessing
 from rpmUtils.miscutils import splitFilename
+import mic.kickstart
+from mic.utils.misc import get_pkglist_in_comps
 from dependency_graph_builder import DependencyGraphBuilder
 import temporaries
 import binfmt
@@ -344,16 +346,18 @@ def check_repository_names(names, kickstart_file_path):
             if_error = True
 
 
-def construct_combined_repositories(parameters, rpm_patcher):
+def construct_combined_repositories(parameters, rpm_patcher, packages):
     """
     Constructs combined repositories based on arguments.
 
     @param parameters       The parameters of the repository combiner.
     @param rpm_patcher      The patcher of RPMs.
+    @param packages         The list of package names that should be installed
+                            to the image with all their dependencies.
 
     @return         The list of combined repositories' paths.
     """
-    dependency_builder = DependencyGraphBuilder(check_rpm_name)
+    dependency_builder = DependencyGraphBuilder(check_rpm_name, packages)
 
     combined_repository_paths = []
     marked_packages_total = Set()
@@ -563,6 +567,48 @@ def prepare_repositories(parameters):
     return kickstart_file_path
 
 
+def resolve_groups(repositories, kickstart_file_path):
+    """
+    Resolves packages groups from kickstart file.
+
+    @param repositories         The list of original repository URLs.
+    @param kickstart_file_path  The path to the kickstart file.
+    @return                     The list of package names.
+    """
+    groups_paths = []
+    for url in repositories:
+        repository = Repository(url)
+        repository.prepare_data()
+        groups_data = repository.data.groups_data
+        if groups_data is not None and len(groups_data) > 0:
+            groups_path = temporaries.create_temporary_file("group.xml")
+            with open(groups_path, "w") as groups_file:
+                groups_file.writelines(groups_data)
+            groups_paths.append(groups_path)
+    logging.debug("Following groups files prepared:")
+    for groups_path in groups_paths:
+        logging.debug(" * {0}".format(groups_path))
+    parser = mic.kickstart.read_kickstart(kickstart_file_path)
+    groups = mic.kickstart.get_groups(parser)
+    groups_resolved = {}
+    for group in groups:
+        for groups_path in groups_paths:
+            packages = get_pkglist_in_comps(group.name, groups_path)
+            if packages is not None and len(packages) > 0:
+                groups_resolved[group.name] = packages
+                break
+        logging.debug("Group {0} contains {1} "
+                      "packages.".format(group.name,
+                                         len(groups_resolved[group.name])))
+    packages_all = []
+    for group_name in groups_resolved.keys():
+        packages_all.extend(groups_resolved[group_name])
+    if len(groups_resolved) != len(groups):
+        logging.error("Not all groups were resolved.")
+        sys.exit("Error.")
+    return packages_all
+
+
 def combine(parameters):
     """
     Combines the repostories based on parameters structure.
@@ -572,21 +618,27 @@ def combine(parameters):
     global target_arhcitecture
     target_arhcitecture = parameters.architecture
     parameters.kickstart_file_path = prepare_repositories(parameters)
-    initialize()
 
     original_repositories = [repository_pair.url for repository_pair
                              in parameters.repository_pairs]
     logging.debug("Original repository URLs: "
                   "{0}".format(original_repositories))
+    packages = resolve_groups(original_repositories,
+                              parameters.kickstart_file_path)
+    logging.debug("Packages:")
+    for package in packages:
+        logging.debug(" * {0}".format(package))
     names = [repository_pair.name for repository_pair
              in parameters.repository_pairs]
+    initialize()
     patcher = rpm_patcher.RpmPatcher(names,
                                      original_repositories,
                                      parameters.architecture,
                                      parameters.kickstart_file_path)
     patcher.prepare()
     combined_repositories = construct_combined_repositories(parameters,
-                                                            patcher)
+                                                            patcher,
+                                                            packages)
     mic_options = ["--shrink"]
     if parameters.mic_options is list:
         mic_options.extend(args.mic_options)
