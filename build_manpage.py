@@ -1,18 +1,20 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 # This file is based on Oz Nahum Tiram <nahumoz@gmail.com> work
+"""
+This module builds a standard UNIX manpage from ArgsParse options description
+"""
 
 import datetime
 from distutils.core import Command
 from distutils.errors import DistutilsOptionError
 from distutils.command.build import build
 import argparse
-import re as _re
 from os import path, mkdir
 
 AUTO_BUILD = True
 
-intro = """.SS TERMS AND ABBREVIATIONS
+INTRO = r""".SS TERMS AND ABBREVIATIONS
 .TP
 .BR original\\fR\ repository
 Repository which is used as base for building - usually contains a repository
@@ -29,10 +31,16 @@ A build description script file used by mic tool for firmware creation.
 Combination of
 .IR \(lqrepository_name\ original_path\ marked_path\(rq \\fR
 used for mapping marked repositories to original ones
+.TP
+.BR config\\fR\ file
+A configuration file in format equal to gbs.conf
 """
 
 
 def check_data_dir():
+    """
+    Check if combirepo/data directory exists or create it
+    """
     data_dir = path.join(path.dirname(path.abspath(__file__)),
                          "combirepo", "data")
     if not path.exists(data_dir):
@@ -41,7 +49,9 @@ def check_data_dir():
 
 
 class BuildManPage(Command):
-
+    """
+    Class with man page generation activities for Command
+    """
     description = 'Generate man page from an ArgumentParser instance.'
 
     user_options = [
@@ -71,18 +81,17 @@ class BuildManPage(Command):
     def run(self):
 
         dist = self.distribution
-        homepage = dist.get_url()
+        url = dist.get_url()
         appname = self._parser.prog
 
         sections = {'authors': ("Contact\n"
-                                ".MT i.palachev@\:samsung.com\n"
+                                r".MT i.palachev@\:samsung.com\n"
                                 "Ilya Palachev\n"
-                                ".ME\nor\n.MT v.barinov@\:samsung.com\n"
+                                r".ME\nor\n.MT v.barinov@\:samsung.com\n"
                                 "Vyacheslav Barinov\n.ME\n"
-                                "for more information"),
+                                "for more information or see {0}".format(url)),
                     'see also': ("mic(1), osc(1), gbs(1),"
-                                 "createrepo(8), modifyrepo(1)"),
-                    }
+                                 "createrepo(8), modifyrepo(1)")}
 
         dist = self.distribution
         mpf = ManPageFormatter(appname,
@@ -90,10 +99,10 @@ class BuildManPage(Command):
                                long_desc=dist.get_long_description(),
                                ext_sections=sections)
 
-        m = mpf.format_man_page(self._parser)
+        man_page = mpf.format_man_page(self._parser)
         check_data_dir()
-        with open(self.output, 'w') as f:
-            f.write(m)
+        with open(self.output, 'w') as man_file:
+            man_file.write(man_page)
 
 
 class ManPageFormatter(argparse.HelpFormatter):
@@ -128,12 +137,9 @@ class ManPageFormatter(argparse.HelpFormatter):
                  indent_increment=2,
                  max_help_position=24,
                  width=None,
-                 section=1,
                  desc=None,
                  long_desc=None,
-                 ext_sections=None,
-                 authors=None,
-                 ):
+                 ext_sections=None):
 
         super(ManPageFormatter, self).__init__("combirepo")
 
@@ -145,20 +151,35 @@ class ManPageFormatter(argparse.HelpFormatter):
         self._ext_sections = ext_sections
 
     def _split_lines(self, text, width):
+        """
+        Allows forcing newlines in lines starting with R|
+        """
         if text.startswith('R|'):
             return text[2:].splitlines()
         return argparse.HelpFormatter._split_lines(self, text, width)
 
     def _get_formatter(self, **kwargs):
+        """
+        Return current formatter
+        """
         return self.formatter_class(prog=self.prog, **kwargs)
 
     def _markup(self, txt):
+        """
+        Convert description minuses to groff markup
+        """
         return txt.replace('-', '\\-')
 
     def _underline(self, string):
+        """
+        groff underlined text markup
+        """
         return "\\fI\\s-1" + string + "\\s0\\fR"
 
     def _bold(self, string):
+        """
+        groff bold text markup
+        """
         if not string.strip().startswith('\\fB'):
             string = '\\fB' + string
         if not string.strip().endswith('\\fR'):
@@ -166,6 +187,9 @@ class ManPageFormatter(argparse.HelpFormatter):
         return string
 
     def _mk_synopsis(self, parser):
+        """
+        Create the first section of man page
+        """
         self.add_usage(parser.usage, parser._actions,
                        parser._mutually_exclusive_groups, prefix='')
         usage = self._format_usage(None, parser._actions,
@@ -177,6 +201,9 @@ class ManPageFormatter(argparse.HelpFormatter):
         return usage
 
     def _mk_title(self, prog):
+        """
+        Create the first line of man page
+        """
         return '.TH {0} {1} {2}\n'.format(prog, self._section,
                                           self._today)
 
@@ -189,13 +216,19 @@ class ManPageFormatter(argparse.HelpFormatter):
                                           parser.description)
 
     def _mk_description(self):
+        """
+        Add long description before options listing
+        """
         if self._long_desc:
             long_desc = self._long_desc.replace('\n', '\n.br\n')
-            return '.SH DESCRIPTION\n%s\n' % self._markup(long_desc) + intro
+            return '.SH DESCRIPTION\n%s\n' % self._markup(long_desc) + INTRO
         else:
             return ''
 
     def _mk_footer(self, sections):
+        """
+        Append additional sections to end of man page
+        """
         if not hasattr(sections, '__iter__'):
             return ''
 
@@ -207,6 +240,9 @@ class ManPageFormatter(argparse.HelpFormatter):
         return '\n'.join(footer)
 
     def format_man_page(self, parser):
+        """
+        Creates the man page as a single string object
+        """
         page = []
         page.append(self._mk_title(self._prog))
         page.append(self._mk_synopsis(parser))
@@ -217,7 +253,9 @@ class ManPageFormatter(argparse.HelpFormatter):
         return ''.join(page)
 
     def _mk_options(self, parser):
-
+        """
+        Convert ArgsParse options to man page description
+        """
         formatter = parser._get_formatter()
 
         # positionals, optionals and user-defined groups
@@ -234,6 +272,9 @@ class ManPageFormatter(argparse.HelpFormatter):
         return '.SH OPTIONS\n' + formatter.format_help()
 
     def _format_action_invocation(self, action):
+        """
+        Format options description into groff
+        """
         if not action.option_strings:
             metavar, = self._metavar_formatter(action, action.dest)(1)
             return metavar

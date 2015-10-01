@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+"""Setup related code is placed here"""
 
 from setuptools import setup
 from setuptools.command.sdist import sdist
@@ -64,8 +65,7 @@ setup(name='combirepo',
       install_requires=['argparse',
                         'iniparse',
                         'python-igraph',
-                        'configparser',
-                        ],
+                        'configparser'],
       requires=['yum', 'mic', 'createrepo', 'modifyrepo'],
       package_data={'combirepo': ['data/*']},
 
@@ -79,5 +79,4 @@ setup(name='combirepo',
           'console_scripts': [
               'combirepo=combirepo.__main__:main'
               ],
-          }
-      )
+          })
