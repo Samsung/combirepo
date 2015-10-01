@@ -158,7 +158,7 @@ def construct_combined_repository(graph, marked_graph, marked_packages,
         shutil.copy(location_from, repository_path)
 
     if logging.getLogger().getEffectiveLevel() == logging.DEBUG:
-        hidden_subprocess.call(["ls", "-l", repository_path])
+        hidden_subprocess.silent_call(["ls", "-l", repository_path])
 
     return repository_path
 
@@ -197,7 +197,7 @@ def create_image(arch, repository_names, repository_paths, kickstart_file_path,
         mic_options.extend(["--debug", "--verbose"])
     if mic_options is not None:
         mic_command.extend(mic_options)
-    hidden_subprocess.call(mic_command)
+    hidden_subprocess.call("Building the image", mic_command)
 
 
 def inform_about_unprovided(provided_symbols, unprovided_symbols,

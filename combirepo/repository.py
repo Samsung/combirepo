@@ -34,14 +34,14 @@ class RepositoryData():
         all_groups_gzipped = files.find_fast(directory_path,
                                              ".*group\.xml\.gz$")
         for path in all_groups_gzipped:
-            hidden_subprocess.call(["gzip", "-d", "-k", "-f", path])
+            hidden_subprocess.silent_call(["gzip", "-d", "-k", "-f", path])
             all_groups.append(path.replace(".gz", ""))
 
         all_patterns = files.find_fast(directory_path, ".*patterns\.xml$")
         all_patterns_gzipped = files.find_fast(directory_path,
                                                ".*patterns\.xml\.gz$")
         for path in all_patterns_gzipped:
-            hidden_subprocess.call(["gzip", "-d", "-k", "-f", path])
+            hidden_subprocess.silent_call(["gzip", "-d", "-k", "-f", path])
             all_patterns.append(path.replace(".gz", ""))
 
         groups = None
@@ -185,8 +185,9 @@ class Repository(object):
             backup_group_file = temporaries.create_temporary_file("group.xml")
             shutil.copy(group_file, backup_group_file)
             backup_group_files.append((group_file, backup_group_file))
-            exit_value = hidden_subprocess.call(["modifyrepo", "--remove",
-                                                group_file, repodata_path])
+            modifyrepo_command = ["modifyrepo", "--remove", group_file,
+                                  repodata_path]
+            exit_value = hidden_subprocess.silent_call(modifyrepo_command)
             if exit_value != 0:
                 raise Exception("modifyrepo failed with exit value = "
                                 "{0}".format(exit_value))
@@ -224,7 +225,8 @@ class Repository(object):
                 groups_file.writelines(self.data.groups_data)
             createrepo_command.extend(["-g", "repodata/group.xml"])
 
-        exit_value = hidden_subprocess.call(createrepo_command)
+        exit_value = hidden_subprocess.call("Creating repository.",
+                                            createrepo_command)
         if exit_value != 0:
             raise Exception("createrepo failed with exit value = "
                             "{0}".format(exit_value))
@@ -233,9 +235,9 @@ class Repository(object):
             patterns_file_path = os.path.join(repodata_path, "patterns.xml")
             with open(patterns_file_path, "w") as patterns_file:
                 patterns_file.writelines(self.data.patterns_data)
-            exit_value = hidden_subprocess.call(["modifyrepo",
-                                                patterns_file_path,
-                                                repodata_path])
+            exit_value = hidden_subprocess.silent_call(["modifyrepo",
+                                                        patterns_file_path,
+                                                        repodata_path])
             if exit_value != 0:
                 raise Exception("modifyrepo failed with exit value = "
                                 "{0}".format(exit_value))

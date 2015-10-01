@@ -257,7 +257,7 @@ class CommandlineParser():
         @return                 The list of repository pairs.
         """
         if len(arguments.triplets) == 0:
-            logging.info("Repository info will be read from config file...")
+            logging.debug("Repository info will be read from config file...")
             return []
         if len(arguments.triplets) % 3 != 0:
             logging.error("Number of positional arguments should be divided "

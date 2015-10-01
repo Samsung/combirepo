@@ -21,6 +21,42 @@ developer_original_image = None
 developer_qemu_path = None
 
 
+def rebuild_rpm_package(package_name, release):
+    """
+    Rebuilds the RPM package so that to adjust it release number.
+
+    @param package_name     The path to the package.
+    @param release          The required release number.
+    @return                 The name of patched package.
+    """
+
+    rpmrebuild_command = ["rpmrebuild",
+                          "--release={0}".format(release), "-p", "-n",
+                          package_name]
+    logging.info("Running command: "
+                 "{0}".format(" ".join(rpmrebuild_command)))
+    log_file_name = temporaries.create_temporary_file("rpmrebuild.log")
+    with open(log_file_name, 'w') as log_file:
+        code = subprocess.call(rpmrebuild_command, stdout=log_file,
+                               stderr=log_file)
+    if code != 0:
+        logging.error("The subprocess failed!")
+        logging.error("STDERR output:")
+        with open(log_file_name, 'r') as log_file:
+            logging.error("{0}".format(log_file.read()))
+
+    result = None
+    with open(log_file_name, 'r') as log_file:
+        for line in log_file:
+            if line.startswith("result: "):
+                result = line.replace("result: ", "")
+                result = result.replace("\n", "")
+    if result is None:
+        logging.error("Failed to patch RPM file!")
+        sys.exit("Error.")
+    return result
+
+
 class RpmPatcher():
     """
     The object of this class is used to patch RPMs so that to make them
@@ -225,8 +261,9 @@ class RpmPatcher():
         os.chroot(self.patching_root)
         os.chdir("/")
         os.chdir("/rpmrebuild/src")
-        hidden_subprocess.call(["make"])
-        hidden_subprocess.call(["make", "install"])
+        hidden_subprocess.call("Making the rpmrebuild.", ["make"])
+        hidden_subprocess.call("Installing the rpmrebuild.",
+                               ["make", "install"])
         check.command_exists("rpmrebuild")
         queue.put(True)
 
@@ -266,8 +303,9 @@ class RpmPatcher():
                 shutil.rmtree(already_present_rpmrebuild)
             elif os.path.isfile(already_present_rpmrebuild):
                 os.remove(already_present_rpmrebuild)
-        hidden_subprocess.call(["tar", "xf", rpmrebuild_file, "-C",
-                               self.patching_root])
+        hidden_subprocess.call("Extracting the rpmrebuild ",
+                               ["tar", "xf", rpmrebuild_file, "-C",
+                                self.patching_root])
 
         queue = multiprocessing.Queue()
         child = multiprocessing.Process(target=self.__install_rpmrebuild,
@@ -300,32 +338,9 @@ class RpmPatcher():
         os.chroot(self.patching_root)
         os.chdir("/")
         check.file_exists(package_name)
-
-        # FIXME: This should also be handled with hidden_subprocess module.
-        rpmrebuild_command = ["rpmrebuild",
-                              "--release={0}".format(release), "-p", "-n",
-                              package_name]
-        logging.info("Running command: "
-                     "{0}".format(" ".join(rpmrebuild_command)))
-        log_file_name = temporaries.create_temporary_file("rpmrebuild.log")
-        with open(log_file_name, 'w') as log_file:
-            code = subprocess.call(rpmrebuild_command, stdout=log_file,
-                                   stderr=log_file)
-        if code != 0:
-            logging.error("The subprocess failed!")
-            logging.error("STDERR output:")
-            with open(log_file_name, 'r') as log_file:
-                logging.error("{0}".format(log_file.read()))
-
-        result = None
-        with open(log_file_name, 'r') as log_file:
-            for line in log_file:
-                if line.startswith("result: "):
-                    result = line.replace("result: ", "")
-                    result = result.replace("\n", "")
-        if result is None:
-            logging.error("Failed to patch RPM file!")
-            sys.exit("Error.")
+        comment = "Patching package {0}".format(os.path.basename(package_name))
+        result = hidden_subprocess.function_call(comment, rebuild_rpm_package,
+                                                 package_name, release)
         queue.put(result)
 
     def patch(self, package_path, directory, release):
