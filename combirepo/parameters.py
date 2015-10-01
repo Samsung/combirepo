@@ -36,7 +36,7 @@ class RepositoryCombinerParameters(object):
         self._mic_options = []
         self._greedy_mode = False
         self._mirror_mode = False
-        self._prefer_strategy = None
+        self._preferring_strategy = None
 
     @property
     def profile_name(self):
@@ -221,22 +221,22 @@ class RepositoryCombinerParameters(object):
         del self._mirror_mode
 
     @property
-    def prefer_strategy(self):
+    def preferring_strategy(self):
         """The identifier of preferring strategy to be used."""
-        return self._prefer_strategy
+        return self._preferring_strategy
 
-    @prefer_strategy.setter
-    def prefer_strategy(self, value):
+    @preferring_strategy.setter
+    def preferring_strategy(self, value):
         if value not in valid_prefer_strategies:
             logging.error("Invalid preferring strategy. Possible are:")
             for strategy in valid_prefer_strategies:
                 logging.error(" * {0}".format(strategy))
             sys.exit("Error.")
-        self._prefer_strategy = value
+        self._preferring_strategy = value
 
-    @prefer_strategy.deleter
-    def prefer_strategy(self):
-        del self._prefer_strategy
+    @preferring_strategy.deleter
+    def preferring_strategy(self):
+        del self._preferring_strategy
 
     def __warn_about_merging_strategy(self, argument):
         """
@@ -322,8 +322,8 @@ class RepositoryCombinerParameters(object):
         if self._output_directory_path is None:
             self._output_directory_path = parameters.output_directory_path
         elif (parameters.output_directory_path is not None and
-                (parameters.output_directory_path
-                    != self._output_directory_path)):
+                (parameters.output_directory_path !=
+                 self._output_directory_path)):
             path = parameters.output_directory_path
             self.__warn_about_merging_strategy(path)
 
@@ -342,9 +342,9 @@ class RepositoryCombinerParameters(object):
         elif parameters.mirror_mode:
             self.__warn_about_merging_strategy("mirror = 1")
 
-        if self._prefer_strategy is None:
-            self._prefer_strategy = parameters.prefer_strategy
-        elif parameters.prefer_strategy:
-            self.__warn_about_merging_strategy(parameters.prefer_strategy)
+        if self._preferring_strategy is None:
+            self._preferring_strategy = parameters.preferring_strategy
+        elif parameters.preferring_strategy:
+            self.__warn_about_merging_strategy(parameters.preferring_strategy)
 
         return self

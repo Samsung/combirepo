@@ -255,7 +255,7 @@ def process_repository_pair(repository_pair, builder, parameters,
     check.directory_exists(repository_pair.url)
     check.directory_exists(repository_pair.url_marked)
 
-    strategy = parameters.prefer_strategy
+    strategy = parameters.preferring_strategy
     preferables = parameters.package_names["preferable"]
     graph, back_graph = builder.build_graph(repository_pair.url,
                                             parameters.architecture,
@@ -440,7 +440,7 @@ def check_rpm_name(rpm_name):
             return False
 
     (name, version, release, epoch, architecture) = components
-    if not architecture in [target_arhcitecture, "noarch"]:
+    if architecture not in [target_arhcitecture, "noarch"]:
         logging.debug("Target architecture is {0}".format(target_arhcitecture))
         logging.debug("It is indended for another architecture, skipping...")
         return False

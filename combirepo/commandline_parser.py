@@ -100,8 +100,8 @@ class CommandlineParser():
                                   "package that are not installed to the "
                                   "image by default, but that must be "
                                   "installed in this build.")
-        self._parser.add_argument("-p", "--preferable", action="append",
-                                  type=str, dest="preferable",
+        self._parser.add_argument("-p", "--preferable-packages",
+                                  action="append", type=str, dest="preferable",
                                   help="The name of package that should "
                                   "be prefered in case of \"have choice\" "
                                   "problem.")
@@ -165,7 +165,7 @@ class CommandlineParser():
             "non-marked repository.")
         self._parser.add_argument(
             "-P", "--preferring-strategy", action="store", type=str,
-            dest="prefer_strategy", help="Have choice resolving strategy "
+            dest="preferring_strategy", help="Have choice resolving strategy "
             "for the case when there are packages with equal names "
             "but different commit/build numbers. Possible values: "
             "\\fBsmall\\fR (prefer smaller number), "
@@ -331,8 +331,8 @@ class CommandlineParser():
 
         parameters.greedy_mode = arguments.greedy
         parameters.mirror_mode = arguments.mirror
-        if arguments.prefer_strategy is not None:
-            parameters.prefer_strategy = arguments.prefer_strategy
+        if arguments.preferring_strategy is not None:
+            parameters.preferring_strategy = arguments.preferring_strategy
         if arguments.sup_repo_url is not None:
             parameters.sup_repo_url = arguments.sup_repo_url
 

@@ -138,12 +138,12 @@ class Repository(object):
         else:
             self.data.find_in_directory(repodata_path)
 
-            if (self.data.groups_data is None
-                    or self.data.patterns_data is None):
+            if (self.data.groups_data is None or
+                    self.data.patterns_data is None):
                 self.data.find_in_directory(self._path)
 
-            if (self.data.groups_data is None
-                    or self.data.patterns_data is None):
+            if (self.data.groups_data is None or
+                    self.data.patterns_data is None):
                 self.data.find_in_repository(self._path)
 
     def set_data(self, data):

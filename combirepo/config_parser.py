@@ -196,9 +196,10 @@ class ConfigParser():
             mirror_mode = self.parser.getboolean(profile_name, "mirror")
             parameters.mirror_mode = mirror_mode
 
-        if self.parser.has_option(profile_name, "prefer_strategy"):
-            prefer_strategy = self.parser.get(profile_name, "prefer_strategy")
-            parameters.prefer_strategy = prefer_strategy
+        if self.parser.has_option(profile_name, "preferring_strategy"):
+            preferring_strategy = self.parser.get(profile_name,
+                                                  "preferring_strategy")
+            parameters.preferring_strategy = preferring_strategy
 
         package_names = {}
         for key in valid_package_keys:
