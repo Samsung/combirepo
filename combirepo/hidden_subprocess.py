@@ -116,3 +116,20 @@ def pipe_call(commandline_from, commandline_to):
 
     timer.cancel()
     sys.stdout.write("\n")
+
+
+def function_call(function, *arguments):
+    """
+    Calls the funciton with the given arguments.
+
+    @param function     The function.
+    @param arguments    Its arguments.
+    """
+    global counter
+    counter = 1
+    timer = RepeatingTimer(1.0, progress_bar_print)
+    timer.daemon = True
+    timer.start()
+    function(*arguments)
+    timer.cancel()
+    sys.stdout.write("\n")
