@@ -9,6 +9,7 @@ import temporaries
 
 
 visible_mode = False
+latency = 0.3
 
 
 class RepeatingTimer(threading._Timer):
@@ -28,24 +29,29 @@ class RepeatingTimer(threading._Timer):
 
 
 counter = 1
+bar_comment = ""
 
 
 def progress_bar_print():
     """
     Prints the simple progress bar to the stdout.
     """
+    progress_symbols = ['|', '/', '—', '\\']
     sys.stdout.write("\r")
     global counter
-    for i in range(counter):
-        sys.stdout.write("#")
+    progress_symbol = progress_symbols[counter % len(progress_symbols)]
+    progress = "[ " + progress_symbol + " ]"
+    progress_bar = bar_comment + " " + progress
+    sys.stdout.write(progress_bar)
     sys.stdout.flush()
     counter = counter + 1
 
 
-def call(commandline):
+def call(comment, commandline):
     """
     Calls the subprocess and hides all its output.
 
+    @param comment      The comment that the user will see.
     @param commandline  The list of command-line words to be executed.
 
     @return             The return code of the process
@@ -53,16 +59,20 @@ def call(commandline):
     code = 0
     global counter
     counter = 1
-    logging.info("Running the command: {0}".format(" ".join(commandline)))
+    global bar_comment
+    bar_comment = comment
+    logging.debug("Running the command: {0}".format(" ".join(commandline)))
     logging.debug("       in the directory {0}".format(os.getcwd()))
 
     global visible_mode
     if visible_mode:
+        logging.info(comment)
         code = subprocess.call(commandline)
     else:
         log_file_name = temporaries.create_temporary_file("process.log")
 
-        timer = RepeatingTimer(1.0, progress_bar_print)
+        global latency
+        timer = RepeatingTimer(latency, progress_bar_print)
         timer.daemon = True
         timer.start()
 
@@ -81,24 +91,33 @@ def call(commandline):
     return code
 
 
-def pipe_call(commandline_from, commandline_to):
+def silent_call(commandline):
+    code = call("", commandline)
+    return code
+
+
+def pipe_call(comment, commandline_from, commandline_to):
     """
     Calls two commands redirecting the output of first command to the second
     one.
 
+    @param comment              The comment that the user will see.
     @param commandline_from     The first command.
     @param commandline_to       The second command.
     """
     code = 0
     global counter
     counter = 1
-    logging.info("Running the command: {0} | "
-                 "{1}".format(" ".join(commandline_from),
-                              " ".join(commandline_to)))
+    global bar_comment
+    bar_comment = comment
+    logging.debug("Running the command: {0} | "
+                  "{1}".format(" ".join(commandline_from),
+                               " ".join(commandline_to)))
     logging.debug("       in the directory {0}".format(os.getcwd()))
     log_file_name = temporaries.create_temporary_file("process.log")
 
-    timer = RepeatingTimer(1.0, progress_bar_print)
+    global latency
+    timer = RepeatingTimer(latency, progress_bar_print)
     timer.daemon = True
     timer.start()
 
@@ -118,18 +137,33 @@ def pipe_call(commandline_from, commandline_to):
     sys.stdout.write("\n")
 
 
-def function_call(function, *arguments):
+def silent_pipe_call(commandline_from, commandline_to):
+    pipe_call("", commandline_from, commandline_to)
+
+
+def function_call(comment, function, *arguments):
     """
     Calls the funciton with the given arguments.
 
-    @param function     The function.
-    @param arguments    Its arguments.
+    @param comment              The comment that the user will see.
+    @param function             The function.
+    @param arguments            Its arguments.
+    @return                     The return value of the called function.
     """
     global counter
     counter = 1
-    timer = RepeatingTimer(1.0, progress_bar_print)
+    global bar_comment
+    bar_comment = comment
+    global latency
+    timer = RepeatingTimer(latency, progress_bar_print)
     timer.daemon = True
     timer.start()
-    function(*arguments)
+    result = function(*arguments)
     timer.cancel()
     sys.stdout.write("\n")
+    return result
+
+
+def silent_function_call(function, *arguments):
+    result = function_call("", function, *arguments)
+    return result

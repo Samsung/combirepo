@@ -64,10 +64,10 @@ def unrpm(rpm_path, destination_path):
         logging.error("Given file {0} is not an RPM package!".format(rpm_path))
     initial_directory = os.getcwd()
     os.chdir(destination_path)
-    hidden_subprocess.pipe_call(["rpm2cpio", rpm_path],
-                                ["cpio", "--extract", "--unconditional",
-                                 "--preserve-modification-time",
-                                 "--make-directories"])
+    hidden_subprocess.silent_pipe_call(["rpm2cpio", rpm_path],
+                                       ["cpio", "--extract", "--unconditional",
+                                        "--preserve-modification-time",
+                                        "--make-directories"])
     os.chdir(initial_directory)
 
 

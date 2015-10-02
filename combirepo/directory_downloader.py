@@ -1,13 +1,14 @@
 #!/usr/bin/env python2.7
 # -*- coding: utf-8 -*-
 import os
+import sys
 import re
 import logging
 import urllib2
+from urlparse import urlparse
 from HTMLParser import HTMLParser
-
-
-re_url = re.compile(r'^(([a-zA-Z_-]+)://([^/]+))(/.*)?$')
+import files
+import hidden_subprocess
 
 
 def resolve_link(link, url):
@@ -18,23 +19,25 @@ def resolve_link(link, url):
     @param link     The link from HTML code.
     @param url      Thr URL of the page being parsed.
     """
-    m = re_url.match(link)
-    if m is not None:
-        if not m.group(4):
-            # http://domain -> http://domain/
-            return link + '/'
+    parsed_link = urlparse(link)
+    parsed_url = urlparse(url)
+    if len(parsed_link.scheme) > 0:
+        if len(parsed_link.netloc) > 0:
+            if not link.endswith("/"):
+                link = link + "/"
         else:
-            return link
-    elif link[0] == '/':
-        # /some/path
-        murl = re_url.match(url)
-        return murl.group(1) + link
+            raise Exception("Net location presents but scheme doe not!")
+    elif link.startswith("/"):
+        if len(parsed_url.scheme) == 0:
+            raise Exception("Given URL does not contain sheme!")
+        if len(parsed_url.netloc) == 0:
+            raise Exception("Given URL does not contain net location!")
+        link = parsed_url.scheme + "://" + parsed_url.netloc + link
     else:
-        # relative/path
-        if url[-1] == '/':
-            return url + link
-        else:
-            return url + '/' + link
+        if not url.endswith("/"):
+            link = link + "/"
+        link = url + link
+    return link
 
 
 class LinkListingHTMLParser(HTMLParser):
@@ -46,8 +49,8 @@ class LinkListingHTMLParser(HTMLParser):
     def __init__(self, url):
         HTMLParser.__init__(self)
 
-        if url[-1] != '/':
-            url += '/'
+        if not url.endswith("/"):
+            url += "/"
         self.__url = url
         self.links = set()
 
@@ -64,13 +67,15 @@ class LinkListingHTMLParser(HTMLParser):
                     break
 
 
-def download_directory(url, target, check_rpm_name):
+def inspect_directory(url, target, check_url):
     """
-    Downloads the given remote directory to the local directory with the
+    Inspects the given remote directory to the local directory with the
     given path.
 
-    @param url      The url of the remote HTTP directory.
-    @param target   The destination direcotry path.
+    @param url          The url of the remote HTTP directory.
+    @param target       The destination directory path.
+    @param check_url    The function that checks whether the file with given
+                        URL should be downloaded.
     """
     def mkdir():
         if not mkdir.done:
@@ -94,14 +99,13 @@ def download_directory(url, target, check_rpm_name):
                 link = link[:-1]
             if not link.startswith(url):
                 continue
-            if not check_rpm_name(link):
+            if not check_url(link):
                 continue
             name = link.rsplit('/', 1)[1]
             if '?' in name:
                 continue
             mkdir()
-            download_directory(link, os.path.join(target,
-                               name), check_rpm_name)
+            inspect_directory(link, os.path.join(target, name), check_url)
             if not mkdir.done:
                 # We didn't find anything to write inside this directory
                 # Maybe it's a HTML file?
@@ -112,9 +116,64 @@ def download_directory(url, target, check_rpm_name):
                     with open(target, 'wb') as file_target:
                         file_target.write(contents)
     else:
-        buffer_size = 4096
-        with open(target, 'wb') as file_target:
+        open(target, 'a').close()
+
+
+def download_file(file_url, file_path):
+    """
+    Downloads the given file URL to the given file path.
+
+    @param file_url     The URL.
+    @param file_path    The path.
+    """
+    buffer_size = 4096
+    with open(file_path, 'wb') as file_target:
+        response = urllib2.urlopen(file_url)
+        chunk = response.read(buffer_size)
+        while chunk:
+            file_target.write(chunk)
             chunk = response.read(buffer_size)
-            while chunk:
-                file_target.write(chunk)
-                chunk = response.read(buffer_size)
+
+
+def download_directory(url, target, check_url):
+    """
+    Inspects the given remote directory to the local directory with the
+    given path.
+
+    @param url          The url of the remote HTTP directory.
+    @param target       The destination directory path.
+    @param check_url    The function that checks whether the file with given
+                        URL should be downloaded.
+    """
+    if not url.endswith("/"):
+        url = url + "/"
+    hidden_subprocess.function_call("Inspecting remote directory "
+                                    "{0}".format(url), inspect_directory, url,
+                                    target, check_url)
+
+    file_paths = files.find_fast(target, ".*")
+    i_file = 1
+    len_name_max = 30
+    num_pluses_max = 25
+    for file_path in file_paths:
+        file_url = url + os.path.relpath(file_path, target)
+        file_name = os.path.basename(file_path)
+        sys.stdout.write("\r")
+        ratio = float(i_file) / float(len(file_paths))
+        num_pluses = int(float(ratio) * float(num_pluses_max))
+        pluses = "{s:+<{n}}".format(s="", n=num_pluses)
+        progress = "[{0}/{1}]".format(i_file, len(file_paths))
+        sys.stdout.write(
+            "Downloading: {file_name: <{len_name}.{len_name}} "
+            "{bar: <{len_bar}.{len_bar}} "
+            "{progress: "
+            ">{len_progress}."
+            "{len_progress}}".format(file_name=file_name,
+                                     len_name=len_name_max,
+                                     bar=pluses, len_bar=num_pluses_max,
+                                     progress=progress,
+                                     len_progress=len(progress)))
+        sys.stdout.flush()
+        download_file(file_url, file_path)
+        i_file = i_file + 1
+    sys.stdout.write('\n')
