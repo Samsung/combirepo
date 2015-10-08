@@ -60,12 +60,14 @@ class RepositoryManager():
         for repository in self._repositories:
             logging.debug("Found repository: {0}".format(repository))
 
-    def prepare(self, url):
+    def prepare(self, url, authenticator):
         """
         Prepares the local copy of the repository that is specified at the
         given url.
 
         @param url              The URL of the repository.
+        @param authenticator    The encoded user:password string for download
+                                server.
         """
         logging.debug("Starting preparation of repo from URL {0}".format(url))
         if url is None:
@@ -99,7 +101,7 @@ class RepositoryManager():
             logging.debug("Downloading directory {0}".format(url))
             download_directory(repository["url"],
                                repository["path"],
-                               self._name_checking_function)
+                               self._name_checking_function, authenticator)
             repository["status"] = "ready"
             if repository_found is None:
                 self._repositories.append(repository)

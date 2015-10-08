@@ -11,6 +11,7 @@ import subprocess
 import urlparse
 import hidden_subprocess
 import multiprocessing
+import base64
 from rpmUtils.miscutils import splitFilename
 import mic.kickstart
 from mic.utils.misc import get_pkglist_in_comps
@@ -546,12 +547,16 @@ def prepare_repositories(parameters):
         os.mkdir(repository_cache_directory_path)
     repository_manager = RepositoryManager(repository_cache_directory_path,
                                            check_rpm_name)
-    path = repository_manager.prepare(parameters.sup_repo_url)
+    authenticator = base64.encodestring("{0}:{1}".format(parameters.user,
+                                                         parameters.password))
+    authenticator = authenticator.replace('\n', '')
+    path = repository_manager.prepare(parameters.sup_repo_url, authenticator)
     parameters.sup_repo_url = path
     for repository_pair in repository_pairs:
-        path = repository_manager.prepare(repository_pair.url)
+        path = repository_manager.prepare(repository_pair.url, authenticator)
         repository_pair.url = path
-        path_marked = repository_manager.prepare(repository_pair.url_marked)
+        path_marked = repository_manager.prepare(repository_pair.url_marked,
+                                                 authenticator)
         repository_pair.url_marked = path_marked
 
     if repodata_regeneration_enabled:

@@ -11,6 +11,9 @@ import files
 import hidden_subprocess
 
 
+common_authenticator = None
+
+
 def resolve_link(link, url):
     """
     Return the absolute URL to the link which presents at the page with the
@@ -67,6 +70,25 @@ class LinkListingHTMLParser(HTMLParser):
                     break
 
 
+def urlopen(url):
+    """
+    Open the given URL.
+
+    @param url  The URL.
+    @return     Opened URL.
+    """
+    response = None
+    global common_authenticator
+    if common_authenticator is not None:
+        request = urllib2.Request(url)
+        request.add_header("Authorization",
+                           "Basic {0}".format(common_authenticator))
+        response = urllib2.urlopen(request)
+    else:
+        response = urllib2.urlopen(url)
+    return response
+
+
 def inspect_directory(url, target, check_url):
     """
     Inspects the given remote directory to the local directory with the
@@ -88,7 +110,7 @@ def inspect_directory(url, target, check_url):
 
     logging.debug("Downloading {0} to {1}".format(url, target))
 
-    response = urllib2.urlopen(url)
+    response = urlopen(url)
     if response.info().type == 'text/html':
         contents = response.read()
         parser = LinkListingHTMLParser(url)
@@ -128,25 +150,29 @@ def download_file(file_url, file_path):
     """
     buffer_size = 4096
     with open(file_path, 'wb') as file_target:
-        response = urllib2.urlopen(file_url)
+        response = urlopen(file_url)
         chunk = response.read(buffer_size)
         while chunk:
             file_target.write(chunk)
             chunk = response.read(buffer_size)
 
 
-def download_directory(url, target, check_url):
+def download_directory(url, target, check_url, authenticator):
     """
     Inspects the given remote directory to the local directory with the
     given path.
 
-    @param url          The url of the remote HTTP directory.
-    @param target       The destination directory path.
-    @param check_url    The function that checks whether the file with given
-                        URL should be downloaded.
+    @param url              The url of the remote HTTP directory.
+    @param target           The destination directory path.
+    @param check_url        The function that checks whether the file with
+                            given URL should be downloaded.
+    @param authenticator    The encoded user:password string for download
+                            server.
     """
     if not url.endswith("/"):
         url = url + "/"
+    global common_authenticator
+    common_authenticator = authenticator
     hidden_subprocess.function_call("Inspecting remote directory "
                                     "{0}".format(url), inspect_directory, url,
                                     target, check_url)

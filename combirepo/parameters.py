@@ -26,6 +26,8 @@ class RepositoryCombinerParameters(object):
         Initializes the combirepo parameters (does nothing).
         """
         self._profile_name = None
+        self._user = None
+        self._password = None
         self._temporary_directory_path = None
         self._sup_repo_url = None
         self._package_names = {}
@@ -50,6 +52,32 @@ class RepositoryCombinerParameters(object):
     @profile_name.deleter
     def profile_name(self):
         del self._profile_name
+
+    @property
+    def user(self):
+        """The user name at the download server."""
+        return self._user
+
+    @user.setter
+    def user(self, value):
+        self._user = value
+
+    @user.deleter
+    def user(self):
+        del self._user
+
+    @property
+    def password(self):
+        """The password at the download server."""
+        return self._password
+
+    @password.setter
+    def password(self, value):
+        self._password = value
+
+    @password.deleter
+    def password(self):
+        del self._password
 
     @property
     def temporary_directory_path(self):
@@ -284,6 +312,14 @@ class RepositoryCombinerParameters(object):
         elif parameters.sup_repo_url is not None:
             url = parameters.sup_repo_url
             self.__warn_about_merging_strategy(url)
+        if self._user is None:
+            self._user = parameters.user
+        elif parameters.user is not None:
+            self.__warn_about_merging_strategy(parameters.user)
+        if self._password is None:
+            self._password = parameters.password
+        elif parameters.password is not None:
+            self.__warn_about_merging_strategy(parameters.password)
 
         if len(self._package_names.keys()) == 0:
             self._package_names = parameters.package_names

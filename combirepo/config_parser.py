@@ -5,6 +5,7 @@ import sys
 import logging
 import configparser
 import difflib
+import base64
 import strings
 import check
 from parameters import RepositoryCombinerParameters, valid_package_keys
@@ -170,6 +171,20 @@ class ConfigParser():
         self.__check_option_exists(profile_name, "repos")
         repository_aliases = self.__get_list(profile_name, "repos")
 
+        if self.parser.has_option(profile_name, "user"):
+            parameters.user = self.parser.get(profile_name, "user")
+        if self.parser.has_option(profile_name, "password"):
+            parameters.password = self.parser.get(profile_name, "password")
+            if self.parser.has_option(profile_name, "passwordx"):
+                logging.error("Both password and passwordx present!")
+                sys.exit("Error.")
+            self.parser.remove_option(profile_name, "password")
+            passwordx = base64.b64encode(parameters.password.encode('bz2'))
+            self.parser.set(profile_name, "passwordx", passwordx)
+        elif self.parser.has_option(profile_name, "passwordx"):
+            passwordx = self.parser.get(profile_name, "passwordx")
+            parameters.password = base64.b64decode(passwordx).decode('bz2')
+
         if self.parser.has_option(profile_name, "repo_supplementary"):
             parameters.sup_repo_url = self.parser.get(profile_name,
                                                       "repo_supplementary")
@@ -213,4 +228,6 @@ class ConfigParser():
         repository_pairs = self.__build_repository_pairs(repository_aliases)
         parameters.repository_pairs = repository_pairs
 
+        with open(self.path, 'wb') as config_file:
+            self.parser.write(config_file)
         return parameters

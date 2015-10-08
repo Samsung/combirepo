@@ -177,6 +177,12 @@ class CommandlineParser():
             "in regular repositories that should be installed to the image. "
             "E.g. for sanitized build this should be a project where "
             "\\fBlibasan\\fR is built.")
+        self._parser.add_argument(
+            "--user", action="store", type=str, dest="user", help="The user "
+            "name at the download server.")
+        self._parser.add_argument(
+            "--password", action="store", type=str, dest="password",
+            help="The password at the download server.")
 
     def __register_developer_options(self):
         """
@@ -335,6 +341,10 @@ class CommandlineParser():
             parameters.preferring_strategy = arguments.preferring_strategy
         if arguments.sup_repo_url is not None:
             parameters.sup_repo_url = arguments.sup_repo_url
+        if arguments.user is not None:
+            parameters.user = arguments.user
+        if arguments.password is not None:
+            parameters.password = arguments.password
 
         if not os.path.isdir(arguments.cachedir):
             logging.warning("Creating combirepo temporary directory "
