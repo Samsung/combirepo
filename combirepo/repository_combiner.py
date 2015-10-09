@@ -81,9 +81,56 @@ def build_package_set(graph, back_graph, package_names):
             marked = marked | Set([package])
 
     for package in marked:
-        logging.info("Package {0} is marked".format(package))
+        logging.debug("Package {0} is marked".format(package))
+    logging.info("Number of marked packages in this repository: "
+                 "{0}".format(len(marked)))
 
     return marked
+
+
+def check_rpm_versions(graph, marked_graph, packages):
+    """
+    Checks that versions of packages do not differ, otherwise reports about
+    all differencies and aborts the program.
+
+    @param graph            Dependency graph of the non-marked repository
+    @param marked_graph     Dependency graph of the marked repository
+    @param marked_packages  Set of marked package names
+    """
+    packages_different = {}
+    for package in packages:
+        package_id = graph.get_name_id(package)
+        if package_id is None:
+            continue
+        marked_package_id = marked_graph.get_name_id(package)
+        if marked_package_id is None:
+            continue
+        version = graph.vs[package_id]["version"]
+        version_marked = marked_graph.vs[marked_package_id]["version"]
+        if version != version_marked:
+            packages_different[package] = [version, version_marked]
+
+    num_different = len(packages_different.keys())
+    if num_different == 0:
+        return
+    len_package_name_max = max([len(package) for package in
+                                packages_different.keys()])
+    len_version_max = max([max([len(version) for version in
+                                packages_different[package]])
+                           for package in packages_different.keys()])
+    logging.error("Found {0} packages with different version "
+                  "numbers!".format(num_different))
+    for package in packages_different.keys():
+        [version, version_marked] = packages_different[package]
+        logging.error(
+            " {package: <{len_package}.{len_package}} "
+            "{version: <{len_version}.{len_version}} "
+            "{version_marked: <{len_version}.{len_version}}"
+            "".format(package=package, len_package=len_package_name_max,
+                      version=version, version_marked=version_marked,
+                      len_version=len_version_max))
+    logging.error("Please go and rebuild them!")
+    sys.exit("Error.")
 
 
 def construct_combined_repository(graph, marked_graph, marked_packages,
@@ -99,8 +146,9 @@ def construct_combined_repository(graph, marked_graph, marked_packages,
                             non-marked repository
     @param rpm_patcher      The patcher of RPMs.
 
-    @return             The path to the constructed combined repository.
+    @return                 The path to the constructed combined repository.
     """
+    check_rpm_versions(graph, marked_graph, marked_packages)
     repository_path = temporaries.create_temporary_directory("combirepo")
     packages_not_found = []
 
@@ -110,20 +158,12 @@ def construct_combined_repository(graph, marked_graph, marked_packages,
             packages_not_found.append(package)
             continue
         location_from = marked_graph.vs[marked_package_id]["location"]
-        version_marked = marked_graph.vs[marked_package_id]["version"]
         release_marked = marked_graph.vs[marked_package_id]["release"]
 
         package_id = graph.get_name_id(package)
         if package_id is None:
             shutil.copy(location_from, repository_path)
         else:
-            version = graph.vs[package_id]["version"]
-            if version != version_marked:
-                logging.error("Versions of package {0} differ: {1} and {2}. "
-                              "Please go and rebuild the marked "
-                              "package!".format(package, version,
-                                                version_marked))
-                sys.exit("Error.")
             release = graph.vs[package_id]["release"]
             if release != release_marked:
                 logging.warning("Release numbers of package {0} differ: "
