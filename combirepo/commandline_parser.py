@@ -99,7 +99,9 @@ class CommandlineParser():
                                   action="append", help="The name of "
                                   "package that are not installed to the "
                                   "image by default, but that must be "
-                                  "installed in this build.")
+                                  "installed in this build. The sample is "
+                                  "\\fBlibasan\\fR package used for builds "
+                                  "with Address Sanitizer support.")
         self._parser.add_argument("-p", "--preferable-packages",
                                   action="append", type=str, dest="preferable",
                                   help="The name of package that should "
@@ -156,13 +158,17 @@ class CommandlineParser():
         """
         self._parser.add_argument(
             "-m", "--mirror", action="store_true", dest="mirror",
-            default=False, help="Whether to mirror not found marked "
-            "packages from non-marked repository")
+            default=False, help="Take packages from \\fInon-marked\\fR "
+            "repository if can't find in marked one. Useful if build in "
+            "marked repository could not be completed in full due to "
+            "some limitations.")
         self._parser.add_argument(
             "-g", "--greedy", action="store_true", default=False,
-            dest="greedy", help="Greedy mode: get as much packages from"
-            "marked repository as possible, and get others from "
-            "non-marked repository.")
+            dest="greedy", help="Greedy mode: get as much packages from "
+            "\\fImarked\\fR repository as possible, and get rest from "
+            "\\fInon-marked\\fR repository. Useful for massive builds: "
+            "LTO enabling for whole project, massive sanitizing, compiler "
+            "options experiments.")
         self._parser.add_argument(
             "-P", "--preferring-strategy", action="store", type=str,
             dest="preferring_strategy", help="Have choice resolving strategy "
@@ -193,26 +199,27 @@ class CommandlineParser():
             "--outdir-preliminary-image", type=str, action="store",
             dest="outdir_original",
             default="/var/tmp/combirepo/preliminary-image",
-            help="Output directory for MIC (during the preliminary"
-            "repository building)")
+            help="\\fBDEBUG\\fR Output directory for MIC (during the "
+            "preliminary repository building)")
         self._parser.add_argument(
             "--preliminary-image", type=str, action="store",
-            dest="original_image", help="Don't build preliminary image, "
-            "use the specified one for that. Given argument must be the path "
-            "to image or images directory.")
+            dest="original_image", help="\\fBDEBUG\\fR Don't build "
+            "preliminary image, use the specified one for that. "
+            "Given argument must be the path to image or images "
+            "directory.")
         self._parser.add_argument(
             "--use-custom-qemu", action="store", type=str, dest="qemu_path",
-            help="Path to qemu that should be used. You can specify the path "
-            "either to RPM package with qemu or to the working qemu "
-            "executable itself.")
+            help="\\fBDEBUG\\fR Path to qemu that should be used. You can "
+            "specify the path either to RPM package with qemu or to the "
+            "working qemu executable itself.")
         self._parser.add_argument(
             "--cachedir", action="store", type=str, dest="cachedir",
-            default="/var/tmp/combirepo", help="The path to the directory "
-            "where combirepo saves its cache.")
+            default="/var/tmp/combirepo", help="Path to cache directory "
+            "for the tool.")
         self._parser.add_argument(
             "--regenerate-repodata", action="store_true", default=False,
-            dest="regenerate_repodata", help="Whether to re-generate the "
-            "repodata for specified repositories")
+            dest="regenerate_repodata", help="Force repodata regeneration "
+            "for repositories.")
 
     def __prepare_parser(self):
         """

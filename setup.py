@@ -54,7 +54,7 @@ class CustomInstallCommand(install):
 setup(name='combirepo',
       version='0.1',
       description='Image creation tool from COMBInation of REPOsitories',
-      long_description='Combines several repositories into firmware.'
+      long_description='Combines several repositories into firmware. '
                        'Intended to be used together with OBS-produced '
                        'repositories.',
       author='Ilya Palachev',

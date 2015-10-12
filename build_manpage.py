@@ -14,13 +14,90 @@ from os import path, mkdir
 
 AUTO_BUILD = True
 
-INTRO = r""".SS TERMS AND ABBREVIATIONS
+INTRO = r""".SS PROCEDURE DESCRIPTION
+\fBcombirepo\fR is used two build the image in which some packages are taken
+from one repository and other packages are taken from the second one. Some
+packages mean that combirepo is able to detect forward and backward
+dependencies between RPM packages and installs the package with its
+dependencies accordingly to user-given parameters.
+
+During the run of \fBcombirepo\fR the so-called \fIcombined\fR repository is
+generated (see the diagram). After that it is passed as an argument to the
+usual mic image creator that builds the firmware.
+
+If the build or release number of rpm package differ (usual situation for OBS
+builds) the tool will patch packages to meet versioning so \fBmic\fR will
+handle firmware as usual.
+.RE
+
+.RE
+       +-------------+           +-------------+
+.RE
+       |\fIoriginal\fR repo|           | \fImarked\fR repo |
+.RE
+       |      +------+           |      +------+
+.RE
+       |      | +----+           |      | +----+
+.RE
+       |      | |    |           |      | |    |
+.RE
+       +------+ +----+           +------+ +----+
+.RE
+          |                                  |
+.RE
+          |                                  v
+.RE
+          |                       +------------+
+.RE
+          |                       | \fBrpmrebuild\fR |
+.RE
+          |                       +------------+
+.RE
+          |                                  |
+.RE
+          |          +---------+             |
+.RE
+          +--------->|\fBcombirepo\fR|<------------+
+.RE
+                     +---------+
+.RE
+                          |
+.RE
+                          v
+.RE
+                   +-------------+
+.RE
+                   |\fIcombined\fR repo|
+.RE
+                   +-------------+
+.RE
+                          |
+.RE
+                          v
+.RE
+                    +----------+
+.RE
+                    |\fBrpmrebuild\fR|
+.RE
+                    +----------+
+.RE
+                          |
+.RE
+                          v
+.RE
+                   +-------------+
+.RE
+                   | Tizen image |
+.RE
+                   +-------------+
+.RE
+.SS TERMS AND ABBREVIATIONS
 .TP
-.BR original\\fR\ repository
-Repository which is used as base for building - usually contains a repository
-which is used for traditional firmware build.
+.BR original\\fR\ or\ \\fBnon-marked\\fR\ repository/package
+Repository which is used as base for building - usually a current stable
+firmware build.
 .TP
-.BR marked\\fR\ repository
+.BR marked\\fR\ repository/package
 Repository which has changes in build procedure and has packages with certain
 uncommon features: Address Sanitizer enabled, LTO switched on and so on.
 .TP
@@ -34,6 +111,12 @@ used for mapping marked repositories to original ones
 .TP
 .BR config\\fR\ file
 A configuration file in format equal to gbs.conf
+.TP
+.BR preliminary\\fR\ repository/image
+A special setup for repository and image which is used for \fBrpmrebuild\fR
+patching. These options should only be used if you are clearly understanding
+what you are doing. This can save time during massive rebuilds when you create
+one buildroot used for rpmrebuild and use it for sequence of builds.
 """
 
 
@@ -90,8 +173,9 @@ class BuildManPage(Command):
                                 r".ME\nor\n.MT v.barinov@\:samsung.com\n"
                                 "Vyacheslav Barinov\n.ME\n"
                                 "for more information or see {0}".format(url)),
-                    'see also': ("mic(1), osc(1), gbs(1),"
-                                 "createrepo(8), modifyrepo(1)")}
+                    'see also': ("mic(1), osc(1), gbs(1), "
+                                 "createrepo(8), modifyrepo(1), "
+                                 "rpmrebuild(1)")}
 
         dist = self.distribution
         mpf = ManPageFormatter(appname,
