@@ -8,6 +8,7 @@ import multiprocessing
 import subprocess
 import temporaries
 import logging
+import re
 import files
 import check
 import hidden_subprocess
@@ -366,8 +367,9 @@ class RpmPatcher():
         patched_package_name = os.path.basename(queue.get())
         logging.info("The package has been rebuilt to adjust release numbers: "
                      "{0}".format(patched_package_name))
+        expression = re.escape(patched_package_name)
         patched_package_paths = files.find_fast(self.patching_root,
-                                                patched_package_name)
+                                                expression)
         patched_package_path = None
         if len(patched_package_paths) < 1:
             raise Exception("Failed to find file "
