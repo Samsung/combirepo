@@ -71,7 +71,9 @@ class RepositoryManager():
         """
         logging.debug("Starting preparation of repo from URL {0}".format(url))
         if url is None:
-            raise Exception("url is None")
+            return None
+        if os.path.isdir(url):
+            return url
         repository_found = None
         i_repository = 0
         for repository in self._repositories:

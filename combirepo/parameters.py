@@ -101,7 +101,9 @@ class RepositoryCombinerParameters(object):
 
     @sup_repo_url.setter
     def sup_repo_url(self, value):
-        if os.path.isdir(value):
+        if value is None:
+            self._sup_repo_url = None
+        elif os.path.isdir(value):
             self._sup_repo_url = os.path.abspath(value)
         else:
             check.valid_url_string(value)

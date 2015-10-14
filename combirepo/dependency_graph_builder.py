@@ -27,6 +27,7 @@ class DependencyGraph(igraph.Graph):
         self.id_names = {}
         self.provided_symbols = Set()
         self.unprovided_symbols = Set()
+        self.symbol_providers = {}
 
     def set_name_id(self, name, id_):
         """
@@ -49,6 +50,31 @@ class DependencyGraph(igraph.Graph):
             return self.id_names[name]
         else:
             return None
+
+    def get_provider_names(self, symbol):
+        """
+        Gets names of RPM package that provide the given symbol.
+
+        @param symbol   The symbol.
+        @return         Package names.
+        """
+        logging.debug("Getting provider for symbol {0}".format(symbol))
+        logging.debug("Total number of symbols: "
+                      "{0}".format(len(self.symbol_providers)))
+        names = []
+        name = self.symbol_providers.get(symbol)
+
+        if name is None:
+            for key in self.symbol_providers.keys():
+                key_basename = os.path.basename(key)
+                symbol_basename = os.path.basename(symbol)
+                if (key_basename == symbol_basename or
+                        (key_basename.startswith(symbol_basename) and
+                            key_basename[len(symbol_basename)] == '(')):
+                    names.append(self.symbol_providers[key])
+        else:
+            names = [name]
+        return names
 
 
 def _get_full_package_name(package):
@@ -480,8 +506,8 @@ class DependencyGraphBuilder():
 
         @return The hash map with dependencies for each package.
         """
-        dependency_graph = DependencyGraph()
-        back_dependency_graph = DependencyGraph()
+        graph = DependencyGraph()
+        back_graph = DependencyGraph()
 
         providers = {}
         empty_list = []
@@ -491,8 +517,8 @@ class DependencyGraphBuilder():
         id_packages = {}
         i = 0
         packages = yum_sack.returnPackages()
-        dependency_graph.add_vertices(len(packages))
-        back_dependency_graph.add_vertices(len(packages))
+        graph.add_vertices(len(packages))
+        back_graph.add_vertices(len(packages))
         names = []
         full_names = []
         locations = []
@@ -506,8 +532,8 @@ class DependencyGraphBuilder():
                 logging.debug("Check with name function...")
                 if not self.name_checking_function(full_name):
                     continue
-            dependency_graph.set_name_id(package.name, i)
-            back_dependency_graph.set_name_id(package.name, i)
+            graph.set_name_id(package.name, i)
+            back_graph.set_name_id(package.name, i)
             names.append(package.name)
             full_names.append(full_name)
             location = self.__find_package_location(package)
@@ -519,16 +545,16 @@ class DependencyGraphBuilder():
             versions.append(package.version)
             releases.append(package.release)
             i = i + 1
-        dependency_graph.vs["name"] = names
-        dependency_graph.vs["full_name"] = full_names
-        dependency_graph.vs["location"] = locations
-        dependency_graph.vs["version"] = versions
-        dependency_graph.vs["release"] = releases
-        back_dependency_graph.vs["name"] = names
-        back_dependency_graph.vs["full_name"] = full_names
-        back_dependency_graph.vs["location"] = locations
-        back_dependency_graph.vs["version"] = versions
-        back_dependency_graph.vs["release"] = releases
+        graph.vs["name"] = names
+        graph.vs["full_name"] = full_names
+        graph.vs["location"] = locations
+        graph.vs["version"] = versions
+        graph.vs["release"] = releases
+        back_graph.vs["name"] = names
+        back_graph.vs["full_name"] = full_names
+        back_graph.vs["location"] = locations
+        back_graph.vs["version"] = versions
+        back_graph.vs["release"] = releases
 
         edges = []
         back_edges = []
@@ -538,26 +564,31 @@ class DependencyGraphBuilder():
         for package in yum_sack.returnPackages():
             if package.name not in packages_scope:
                 continue
-            result = _search_dependencies(yum_sack, package, providers,
-                                          self.preferables, self.strategy)
-            dependencies = result[0]
-            provided = result[1]
-            unprovided = result[2]
+            dependencies, provided, unprovided = _search_dependencies(
+                yum_sack, package, providers, self.preferables, self.strategy)
 
-            provided = dependency_graph.provided_symbols | provided
-            unprovided = dependency_graph.unprovided_symbols | unprovided
-            dependency_graph.provided_symbols = provided
-            dependency_graph.unprovided_symbols = unprovided
+            provided = graph.provided_symbols | provided
+            unprovided = graph.unprovided_symbols | unprovided
+            graph.provided_symbols = provided
+            graph.unprovided_symbols = unprovided
 
             for dependency in dependencies:
-                id_begin = dependency_graph.get_name_id(package.name)
-                id_end = dependency_graph.get_name_id(dependency)
+                id_begin = graph.get_name_id(package.name)
+                id_end = graph.get_name_id(dependency)
                 edges.append((id_begin, id_end))
                 back_edges.append((id_end, id_begin))
                 if dependency not in self.packages:
                     packages_scope = packages_scope | Set([dependency])
             packages_scope = packages_scope - Set([package.name])
 
-        dependency_graph.add_edges(edges)
-        back_dependency_graph.add_edges(back_edges)
-        return dependency_graph, back_dependency_graph
+        graph.add_edges(edges)
+        back_graph.add_edges(back_edges)
+        providers = {}
+        for package in yum_sack.returnPackages():
+            for symbol in package.provides_names:
+                providers[symbol] = package.name
+            for file_name in package.filelist:
+                providers[file_name] = package.name
+        graph.symbol_providers = providers
+        back_graph.symbol_providers = providers
+        return graph, back_graph

@@ -220,6 +220,13 @@ class CommandlineParser():
             "--regenerate-repodata", action="store_true", default=False,
             dest="regenerate_repodata", help="Force repodata regeneration "
             "for repositories.")
+        self._parser.add_argument(
+            "--disable-rpm-patching", action="store_true", default=False,
+            dest="disable_rpm_patching", help="Disable patching of RPM "
+            "packages in order to make the build faster. It causes the "
+            "combirepo to use yum as a package manager inside the image, "
+            "so this option will cause fail if yum does not present in "
+            "the image.")
 
     def __prepare_parser(self):
         """
@@ -365,9 +372,14 @@ class CommandlineParser():
 
         # Process developer options related with RPM patcher:
         rpm_patcher.developer_outdir_original = arguments.outdir_original
-        atexit.register(files.safe_rmtree, arguments.outdir_original)
+        if not arguments.debug:
+            atexit.register(files.safe_rmtree, arguments.outdir_original)
         rpm_patcher.developer_original_image = arguments.original_image
         rpm_patcher.developer_qemu_path = arguments.qemu_path
+        if arguments.disable_rpm_patching:
+            rpm_patcher.developer_disable_patching = True
+            atexit.register(logging.warning, "Be careful, RPM patching was "
+                            "disabled!")
 
         if_regenerate = arguments.regenerate_repodata
         repository_combiner.repodata_regeneration_enabled = if_regenerate

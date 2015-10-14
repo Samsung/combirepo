@@ -25,14 +25,14 @@ def command_exists(command):
     except OSError as error:
         if os.path.isfile(command):
             logging.error("File {0} cannot be executed.".format(command))
-            return False
         elif error.errno == errno.ENOENT:
             logging.error("\"{0}\" command is not available. Try to "
                           "install it!".format(command))
         else:
             logging.error("Unknown error happened during checking the "
                           "command \"{0}\"!".format(command))
-        sys.exit("Error.")
+            return
+        return False
     return True
 
 

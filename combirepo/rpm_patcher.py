@@ -9,6 +9,7 @@ import subprocess
 import temporaries
 import logging
 import re
+from sets import Set
 import files
 import check
 import hidden_subprocess
@@ -20,6 +21,68 @@ import repository_combiner
 developer_outdir_original = None
 developer_original_image = None
 developer_qemu_path = None
+developer_disable_patching = False
+
+
+def prepare_minimal_packages_list(graphs):
+    """
+    Prepares the minimal list of package names that are needed to be installed
+    in the chroot so that rpmrebuild can be used inside it.
+
+    @param graphs           The list of dependency graphs of repositories.
+    @return                 The list of packages.
+    """
+    symbols = ["useradd", "mkdir", "awk", "cpio", "make", "rpmbuild", "sed"]
+    deprecated_substrings = ["mic-bootstrap", "x86", "x64"]
+    providers = {}
+    for symbol in symbols:
+        for graph in graphs:
+            if providers.get(symbol) is None:
+                providers[symbol] = Set()
+            names = graph.get_provider_names(symbol)
+            if names is not None:
+                providers[symbol] = providers[symbol] | Set(names)
+                logging.debug("Got providers {0} for symbol "
+                              "{1}".format(names, symbol))
+                logging.debug("{0}".format(providers[symbol]))
+
+    packages = []
+    for symbol in symbols:
+        provider = None
+        if len(providers[symbol]) < 1:
+            for graph in graphs:
+                for key in graph.symbol_providers.keys():
+                    logging.debug("{0} : {1}".format(
+                        key, graph.symbol_providers[key]))
+            logging.error("Failed to find symbol {0}".format(symbol))
+            logging.error("size: {0}".format(len(graph.symbol_providers)))
+            sys.exit("Error.")
+        elif len(providers[symbol]) > 1:
+            logging.debug("Analyzing symbol {0}:".format(symbol))
+            for provider in providers[symbol]:
+                logging.debug(" Provided by {0}".format(provider))
+                for substring in deprecated_substrings:
+                    if substring in provider:
+                        logging.debug("   ^--- will be ignored, contains "
+                                      "{0}".format(substring))
+                        providers[symbol] = providers[symbol] - Set([provider])
+                        logging.debug("      {0}".format(providers[symbol]))
+            if len(providers[symbol]) > 1:
+                logging.warning("Multiple provider names for symbol "
+                                "\"{0}\":".format(symbol))
+                for provider in providers[symbol]:
+                    logging.warning(" * {0}".format(provider))
+
+            provider = next(iter(providers[symbol]))  # FIXME: is it correct?
+        else:
+            provider = next(iter(providers[symbol]))
+        packages.append(provider)
+
+    logging.debug("Minimal packages list:")
+    for package in packages:
+        logging.debug(" * {0}".format(package))
+
+    return packages
 
 
 def rebuild_rpm_package(package_name, release):
@@ -63,7 +126,8 @@ class RpmPatcher():
     The object of this class is used to patch RPMs so that to make them
     possible to be installed in the combined image.
     """
-    def __init__(self, names, repositories, architecture, kickstart_file_path):
+    def __init__(self, names, repositories, architecture, kickstart_file_path,
+                 graphs):
         """
         Initializes the RPM patcher (does nothing).
 
@@ -80,6 +144,8 @@ class RpmPatcher():
         global developer_qemu_path
         self.qemu_path = developer_qemu_path
         self.patching_root = None
+        self._tasks = []
+        self._graphs = graphs
 
     def __find_platform_images(self):
         """
@@ -153,6 +219,7 @@ class RpmPatcher():
                 if not check.command_exists(self.qemu_path):
                     logging.error("The specified qemu executable is not "
                                   "working.")
+                    sys.exit("Error.")
                 else:
                     install_directory = os.path.join(self.patching_root,
                                                      "usr/local/bin")
@@ -265,14 +332,21 @@ class RpmPatcher():
         hidden_subprocess.call("Making the rpmrebuild.", ["make"])
         hidden_subprocess.call("Installing the rpmrebuild.",
                                ["make", "install"])
-        check.command_exists("rpmrebuild")
+        if not check.command_exists("rpmrebuild"):
+            sys.exit("Error.")
         queue.put(True)
 
-    def prepare(self):
+    def __prepare(self):
         """
         Prepares the patching root ready for RPM patching.
+
         """
-        self.__prepare_image()
+        global developer_disable_patching
+        if developer_disable_patching:
+            logging.debug("RPM patcher will not be prepared.")
+            return
+        graphs = self._graphs
+        self.__prepare_image(graphs)
         images = self.__find_platform_images()
         if len(images) == 0:
             logging.error("No images were found.")
@@ -344,10 +418,9 @@ class RpmPatcher():
                                                  package_name, release)
         queue.put(result)
 
-    def patch(self, package_path, directory, release):
+    def add_task(self, package_path, directory, release):
         """
-        Creates the copy of given package in the given directory and adjusts
-        its release number to the given values.
+        Adds a task to the RPM patcher.
 
         @param package_path     The path to the marked package.
         @param directory        The destination directory where to save the
@@ -355,41 +428,54 @@ class RpmPatcher():
         @param release          The release number of the corresponding
                                 non-marked package.
         """
-        check.file_exists(package_path)
-        shutil.copy(package_path, self.patching_root)
-        package_name = os.path.basename(package_path)
+        self._tasks.append((package_path, directory, release))
 
-        queue = multiprocessing.Queue()
-        child = multiprocessing.Process(target=self.__create_patched_package,
-                                        args=(queue, package_name, release,))
-        child.start()
-        child.join()
-        patched_package_name = os.path.basename(queue.get())
-        logging.info("The package has been rebuilt to adjust release numbers: "
-                     "{0}".format(patched_package_name))
-        expression = re.escape(patched_package_name)
-        patched_package_paths = files.find_fast(self.patching_root,
-                                                expression)
-        patched_package_path = None
-        if len(patched_package_paths) < 1:
-            raise Exception("Failed to find file "
-                            "{0}".format(patched_package_name))
-        elif len(patched_package_paths) > 1:
-            raise Exception("Found multiple files "
-                            "{0}".format(patched_package_name))
-        else:
-            patched_package_path = patched_package_paths[0]
-        shutil.copy(patched_package_path, directory)
+    def do_tasks(self):
+        """
+        Creates copies of added packages in the given directories and adjusts
+        their release numbers to the given values.
+        """
+        self.__prepare()
+        for task in self._tasks:
+            package_path, directory, release = task
+            check.file_exists(package_path)
+            global developer_disable_patching
+            if developer_disable_patching:
+                shutil.copy(package_path, directory)
+                continue
 
-    def __prepare_image(self):
+            shutil.copy(package_path, self.patching_root)
+            package_name = os.path.basename(package_path)
+
+            queue = multiprocessing.Queue()
+            child = multiprocessing.Process(
+                target=self.__create_patched_package,
+                args=(queue, package_name, release,))
+            child.start()
+            child.join()
+            patched_package_name = os.path.basename(queue.get())
+            logging.info("The package has been rebuilt to adjust release "
+                         "numbers: {0}".format(patched_package_name))
+            expression = re.escape(patched_package_name)
+            patched_package_paths = files.find_fast(self.patching_root,
+                                                    expression)
+            patched_package_path = None
+            if len(patched_package_paths) < 1:
+                raise Exception("Failed to find file "
+                                "{0}".format(patched_package_name))
+            elif len(patched_package_paths) > 1:
+                raise Exception("Found multiple files "
+                                "{0}".format(patched_package_name))
+            else:
+                patched_package_path = patched_package_paths[0]
+            shutil.copy(patched_package_path, directory)
+
+    def __prepare_image(self, graphs):
         """
         Prepares the image needed for the RPM patcher.
 
-        @param architecture         The architecture of the image.
-        @param repository_pairs     The list of repository pairs.
-        @param kickstart_file_path  The path to the working kickstartin file.
-
-        @return                     The directory with preliminary images.
+        @param graphs           The list of dependency graphs of repositories.
+        @return                 The directory with preliminary images.
         """
         original_images_dir = None
         global developer_original_image
@@ -411,12 +497,11 @@ class RpmPatcher():
             kickstart_file = KickstartFile(path)
             kickstart_file.comment_all_groups()
             logging.debug("Repositories: {0}".format(self.repositories))
+            packages = prepare_minimal_packages_list(graphs)
             repository_combiner.create_image(self.architecture, self.names,
                                              self.repositories,
                                              path, original_images_dir,
-                                             [],
-                                             ["shadow-utils", "coreutils",
-                                              "make", "rpm-build", "sed"])
+                                             [], packages)
         else:
             if os.path.isdir(developer_original_image):
                 original_images_dir = developer_original_image

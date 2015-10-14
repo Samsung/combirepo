@@ -12,6 +12,7 @@ import urlparse
 import hidden_subprocess
 import multiprocessing
 import base64
+import difflib
 from rpmUtils.miscutils import splitFilename
 import mic.kickstart
 from mic.utils.misc import get_pkglist_in_comps
@@ -166,12 +167,10 @@ def construct_combined_repository(graph, marked_graph, marked_packages,
         else:
             release = graph.vs[package_id]["release"]
             if release != release_marked:
-                logging.warning("Release numbers of package {0} differ: "
-                                "{1} and {2}, so the marked package will be "
-                                "patched so that to match to original release "
-                                "number.".format(package, release,
-                                                 release_marked))
-                rpm_patcher.patch(location_from, repository_path, release)
+                logging.debug("Release numbers of package {0} differ: "
+                              "{1} and {2}".format(package, release,
+                                                   release_marked))
+                rpm_patcher.add_task(location_from, repository_path, release)
             else:
                 shutil.copy(location_from, repository_path)
 
@@ -230,10 +229,17 @@ def create_image(arch, repository_names, repository_paths, kickstart_file_path,
                                             repository_paths)
     kickstart_file.add_packages(specific_packages)
 
+    package_manager = None
+    if rpm_patcher.developer_disable_patching:
+        package_manager = "yum"
+    else:
+        package_manager = "zypp"
+
     # Now create the image using the "mic" tool:
     mic_command = ["sudo", "mic", "create", "loop",
                    modified_kickstart_file_path, "-A", arch, "-o",
-                   output_directory_path, "--tmpfs", "--pkgmgr=zypp"]
+                   output_directory_path, "--tmpfs",
+                   "--pkgmgr={0}".format(package_manager)]
     if logging.getLogger().getEffectiveLevel() <= logging.DEBUG:
         mic_options.extend(["--debug", "--verbose"])
     if mic_options is not None:
@@ -278,21 +284,16 @@ def inform_about_unprovided(provided_symbols, unprovided_symbols,
                         " {0}, but none of them provides it.".format(symbol))
 
 
-def process_repository_pair(repository_pair, builder, parameters,
-                            rpm_patcher):
+def build_graphs(repository_pair, builder, parameters):
     """
-    Processes one repository triplet and constructs combined repository for
-    it.
+    Builds three dependency graphs (forward, backward and marked forward)
+    for the given repository pair.
 
-    @param repository_pair      The repository pair.
+    @param repository_pair      Teh repository pair.
     @param builder              The dependency graph builder.
     @param parameters           The parameters of the repository combiner.
-    @param rpm_patcher          The patcher of RPMs.
-
-    @return                     Path to combined repository.
     """
     repository_name = repository_pair.name
-    logging.info("Processing repository \"{0}\"".format(repository_name))
     check.directory_exists(repository_pair.url)
     check.directory_exists(repository_pair.url_marked)
 
@@ -313,6 +314,22 @@ def process_repository_pair(repository_pair, builder, parameters,
                                           parameters.architecture,
                                           preferables,
                                           strategy)
+    return graph, back_graph, marked_graph
+
+
+def process_repository_pair(repository_pair, graphs, parameters,
+                            rpm_patcher):
+    """
+    Processes one repository triplet and constructs combined repository for
+    it.
+
+    @param repository_pair      The repository pair.
+    @param parameters           The parameters of the repository combiner.
+    @param rpm_patcher          The patcher of RPMs.
+
+    @return                     Path to combined repository.
+    """
+    graph, back_graph, marked_graph = graphs
     inform_about_unprovided(graph.provided_symbols, graph.unprovided_symbols,
                             marked_graph.provided_symbols,
                             marked_graph.unprovided_symbols)
@@ -327,18 +344,12 @@ def process_repository_pair(repository_pair, builder, parameters,
     else:
         marked_packages = build_package_set(graph, back_graph,
                                             parameters.package_names)
-    repository = Repository(repository_pair.url)
-    repository.prepare_data()
-    repodata = repository.data
     mirror_mode = parameters.mirror_mode
     combined_repository_path = construct_combined_repository(graph,
                                                              marked_graph,
                                                              marked_packages,
                                                              mirror_mode,
                                                              rpm_patcher)
-    combined_repository = Repository(combined_repository_path)
-    combined_repository.set_data(repodata)
-    combined_repository.generate_derived_data()
     return combined_repository_path, marked_packages
 
 
@@ -387,39 +398,115 @@ def check_repository_names(names, kickstart_file_path):
             if_error = True
 
 
-def construct_combined_repositories(parameters, rpm_patcher, packages):
+def check_package_names(graphs, package_names):
+    """
+    Checks that given package names really exist in repositories.
+
+    @param graphs           Dependency graphs.
+    @param package_names    Package names.
+    @return                 The list of specified packages.
+    """
+    specified_packages = []
+    for key in ["forward", "backward", "single", "excluded"]:
+        if package_names[key] is not None:
+            specified_packages.extend(package_names[key])
+
+    existing_packages = {}
+    for key in graphs.keys():
+        for graph in graphs[key]:
+            for package in graph.id_names.keys():
+                if existing_packages.get(package) is None:
+                    existing_packages[package] = []
+                if key not in existing_packages[package]:
+                    existing_packages[package].append(key)
+
+    missing_packages = {}
+    for package in specified_packages:
+        if package not in existing_packages.keys():
+            missing_packages[package] = []
+            for candidate in existing_packages.keys():
+                ratio = difflib.SequenceMatcher(
+                    None, package, candidate).ratio()
+                if (ratio > 0.8 or
+                        package in candidate or
+                        candidate in package):
+                    missing_packages[package].append(candidate)
+
+    if len(missing_packages.keys()) > 0:
+        for package in missing_packages.keys():
+            logging.error("Failed to find package \"{0}\" in any "
+                          "repository".format(package))
+            for hint in missing_packages[package]:
+                logging.warning("   Hint: there is package "
+                                "\"{0}\"".format(hint))
+                for repository in existing_packages[hint]:
+                    logging.warning("                          in repository "
+                                    "\"{0}\"".format(repository))
+            if len(missing_packages[package]) > 0:
+                logging.warning("         Maybe you made a typo?")
+        sys.exit("Error.")
+    return specified_packages
+
+
+def construct_combined_repositories(parameters, packages):
     """
     Constructs combined repositories based on arguments.
 
     @param parameters       The parameters of the repository combiner.
-    @param rpm_patcher      The patcher of RPMs.
     @param packages         The list of package names that should be installed
                             to the image with all their dependencies.
 
-    @return         The list of combined repositories' paths.
+    @return                 The list of combined repositories' paths.
     """
     dependency_builder = DependencyGraphBuilder(check_rpm_name, packages)
 
-    combined_repository_paths = []
+    graphs = {}
+    for repository_pair in parameters.repository_pairs:
+        graphs[repository_pair.name] = hidden_subprocess.function_call(
+            "Building dependency graph for repository "
+            "{0}".format(repository_pair.name), build_graphs,
+            repository_pair, dependency_builder, parameters)
+    specified_packages = check_package_names(graphs, parameters.package_names)
+
+    # Prepare RPM patching root based on original dependency graphs:
+    original_repositories = [repository_pair.url for repository_pair
+                             in parameters.repository_pairs]
+    names = [repository_pair.name for repository_pair
+             in parameters.repository_pairs]
+    patcher = rpm_patcher.RpmPatcher(
+        names, original_repositories, parameters.architecture,
+        parameters.kickstart_file_path,
+        [graphs[key][0] for key in graphs.keys()])
+
+    combined_repository_paths = {}
     marked_packages_total = Set()
     for repository_pair in parameters.repository_pairs:
         logging.debug(parameters.package_names)
-        path, marked_packages = process_repository_pair(repository_pair,
-                                                        dependency_builder,
-                                                        parameters,
-                                                        rpm_patcher)
+        path, marked_packages = process_repository_pair(
+            repository_pair, graphs[repository_pair.name], parameters,
+            patcher)
         marked_packages_total = marked_packages_total | marked_packages
-        combined_repository_paths.append(path)
+        combined_repository_paths[repository_pair.name] = path
 
-    specified_packages = []
-    for key in ["forward", "backward", "single", "excluded"]:
-        if parameters.package_names[key] is not None:
-            specified_packages.extend(parameters.package_names[key])
+    excluded_packages = parameters.package_names.get("excluded")
+    if excluded_packages is None:
+        excluded_packages = []
     for package in specified_packages:
-        if package not in marked_packages_total:
+        if (package not in marked_packages_total and
+                package not in excluded_packages):
             raise Exception("Failed to find package with name \"{0}\" in any"
                             " of non-marked repositories".format(package))
-    return combined_repository_paths
+    patcher.do_tasks()
+    for repository_pair in parameters.repository_pairs:
+        repository = Repository(repository_pair.url)
+        repository.prepare_data()
+        repodata = repository.data
+        combined_repository = Repository(
+            combined_repository_paths[repository_pair.name])
+        combined_repository.set_data(repodata)
+        combined_repository.generate_derived_data()
+    return [combined_repository_paths[key] for key in
+            combined_repository_paths.keys()]
 
 
 def initialize():
@@ -434,7 +521,8 @@ def initialize():
     # that they exist in the current environment:
     for command in ["mic", "createrepo", "modifyrepo", "sudo", "ls",
                     "rpm2cpio", "cpio"]:
-        check.command_exists(command)
+        if not check.command_exists(command):
+            sys.exit("Error.")
 
 
 def check_rpm_name(rpm_name):
@@ -637,11 +725,10 @@ def resolve_groups(repositories, kickstart_file_path):
     groups = mic.kickstart.get_groups(parser)
     groups_resolved = {}
     for group in groups:
+        groups_resolved[group.name] = []
         for groups_path in groups_paths:
             packages = get_pkglist_in_comps(group.name, groups_path)
-            if packages is not None and len(packages) > 0:
-                groups_resolved[group.name] = packages
-                break
+            groups_resolved[group.name] = packages
         logging.debug("Group {0} contains {1} "
                       "packages.".format(group.name,
                                          len(groups_resolved[group.name])))
@@ -676,13 +763,7 @@ def combine(parameters):
     names = [repository_pair.name for repository_pair
              in parameters.repository_pairs]
     initialize()
-    patcher = rpm_patcher.RpmPatcher(names,
-                                     original_repositories,
-                                     parameters.architecture,
-                                     parameters.kickstart_file_path)
-    patcher.prepare()
     combined_repositories = construct_combined_repositories(parameters,
-                                                            patcher,
                                                             packages)
     mic_options = ["--shrink"]
     if parameters.mic_options is list:
@@ -692,8 +773,9 @@ def combine(parameters):
     ks_modified_path = temporaries.create_temporary_file("mod.ks")
     shutil.copy(parameters.kickstart_file_path, ks_modified_path)
     kickstart_file = KickstartFile(ks_modified_path)
-    kickstart_file.add_repository_path("supplementary",
-                                       parameters.sup_repo_url)
+    if parameters.sup_repo_url is not None:
+        kickstart_file.add_repository_path("supplementary",
+                                           parameters.sup_repo_url)
     parameters.kickstart_file_path = ks_modified_path
     create_image(parameters.architecture, names, combined_repositories,
                  parameters.kickstart_file_path,

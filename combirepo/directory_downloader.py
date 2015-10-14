@@ -5,6 +5,7 @@ import sys
 import re
 import logging
 import urllib2
+import time
 from urlparse import urlparse
 from HTMLParser import HTMLParser
 import files
@@ -110,7 +111,16 @@ def inspect_directory(url, target, check_url):
 
     logging.debug("Downloading {0} to {1}".format(url, target))
 
-    response = urlopen(url)
+    while True:
+        try:
+            response = urlopen(url)
+        except urllib2.URLError as error:
+            logging.debug("Exception happened: (errno {0}) "
+                          "{1}".format(error.errno, error.strerror))
+            time.sleep(0.1)
+            logging.debug
+        else:
+            break
     if response.info().type == 'text/html':
         contents = response.read()
         parser = LinkListingHTMLParser(url)
@@ -135,10 +145,13 @@ def inspect_directory(url, target, check_url):
                     end = target[-5:].lower()
                     if not (end.endswith('.htm') or end.endswith('.html')):
                         target = target + '.html'
-                    with open(target, 'wb') as file_target:
-                        file_target.write(contents)
+                    if not (os.path.isfile(target) and
+                            os.path.getsize(target) > 0):
+                        with open(target, 'wb') as file_target:
+                            file_target.write(contents)
     else:
-        open(target, 'a').close()
+        if not os.path.isfile(target):
+            open(target, 'a').close()
 
 
 def download_file(file_url, file_path):
@@ -148,6 +161,10 @@ def download_file(file_url, file_path):
     @param file_url     The URL.
     @param file_path    The path.
     """
+    # Do not repeat the download if file already presents.
+    if (os.path.isfile(file_path) and
+            os.path.getsize(file_path) > 0):
+        return
     buffer_size = 4096
     with open(file_path, 'wb') as file_target:
         response = urlopen(file_url)
