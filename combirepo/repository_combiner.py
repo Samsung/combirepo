@@ -170,7 +170,8 @@ def construct_combined_repository(graph, marked_graph, marked_packages,
                 logging.debug("Release numbers of package {0} differ: "
                               "{1} and {2}".format(package, release,
                                                    release_marked))
-                rpm_patcher.add_task(location_from, repository_path, release)
+                rpm_patcher.add_task(package, location_from, repository_path,
+                                     release)
             else:
                 shutil.copy(location_from, repository_path)
 

@@ -18,6 +18,7 @@ from kickstart_parser import KickstartFile
 import repository_combiner
 
 
+developer_outdir_original_default = "/var/tmp/combirepo/preliminary-image"
 developer_outdir_original = None
 developer_original_image = None
 developer_qemu_path = None
@@ -97,8 +98,8 @@ def rebuild_rpm_package(package_name, release):
     rpmrebuild_command = ["rpmrebuild",
                           "--release={0}".format(release), "-p", "-n",
                           package_name]
-    logging.info("Running command: "
-                 "{0}".format(" ".join(rpmrebuild_command)))
+    logging.debug("Running command: "
+                  "{0}".format(" ".join(rpmrebuild_command)))
     log_file_name = temporaries.create_temporary_file("rpmrebuild.log")
     with open(log_file_name, 'w') as log_file:
         code = subprocess.call(rpmrebuild_command, stdout=log_file,
@@ -413,22 +414,57 @@ class RpmPatcher():
         os.chroot(self.patching_root)
         os.chdir("/")
         check.file_exists(package_name)
-        comment = "Patching package {0}".format(os.path.basename(package_name))
-        result = hidden_subprocess.function_call(comment, rebuild_rpm_package,
-                                                 package_name, release)
+        result = rebuild_rpm_package(package_name, release)
         queue.put(result)
 
-    def add_task(self, package_path, directory, release):
+    def add_task(self, package_name, package_path, directory, release):
         """
         Adds a task to the RPM patcher.
 
+        @param package_name     The name of package.
         @param package_path     The path to the marked package.
         @param directory        The destination directory where to save the
                                 package copy.
         @param release          The release number of the corresponding
                                 non-marked package.
         """
-        self._tasks.append((package_path, directory, release))
+        self._tasks.append((package_name, package_path, directory, release))
+
+    def __patch_package(self, package_path, directory, release):
+        """
+        Patches on package.
+        @param package_path     The path to the marked package.
+        @param directory        The destination directory where to save the
+                                package copy.
+        @param release          The release number of the corresponding
+                                non-marked package.
+        """
+        check.file_exists(package_path)
+        shutil.copy(package_path, self.patching_root)
+        package_name = os.path.basename(package_path)
+
+        queue = multiprocessing.Queue()
+        child = multiprocessing.Process(
+            target=self.__create_patched_package,
+            args=(queue, package_name, release,))
+        child.start()
+        child.join()
+        patched_package_name = os.path.basename(queue.get())
+        logging.debug("The package has been rebuilt to adjust release "
+                      "numbers: {0}".format(patched_package_name))
+        expression = re.escape(patched_package_name)
+        patched_package_paths = files.find_fast(self.patching_root,
+                                                expression)
+        patched_package_path = None
+        if len(patched_package_paths) < 1:
+            raise Exception("Failed to find file "
+                            "{0}".format(patched_package_name))
+        elif len(patched_package_paths) > 1:
+            raise Exception("Found multiple files "
+                            "{0}".format(patched_package_name))
+        else:
+            patched_package_path = patched_package_paths[0]
+        shutil.copy(patched_package_path, directory)
 
     def do_tasks(self):
         """
@@ -436,39 +472,18 @@ class RpmPatcher():
         their release numbers to the given values.
         """
         self.__prepare()
-        for task in self._tasks:
-            package_path, directory, release = task
-            check.file_exists(package_path)
-            global developer_disable_patching
-            if developer_disable_patching:
-                shutil.copy(package_path, directory)
-                continue
-
-            shutil.copy(package_path, self.patching_root)
-            package_name = os.path.basename(package_path)
-
-            queue = multiprocessing.Queue()
-            child = multiprocessing.Process(
-                target=self.__create_patched_package,
-                args=(queue, package_name, release,))
-            child.start()
-            child.join()
-            patched_package_name = os.path.basename(queue.get())
-            logging.info("The package has been rebuilt to adjust release "
-                         "numbers: {0}".format(patched_package_name))
-            expression = re.escape(patched_package_name)
-            patched_package_paths = files.find_fast(self.patching_root,
-                                                    expression)
-            patched_package_path = None
-            if len(patched_package_paths) < 1:
-                raise Exception("Failed to find file "
-                                "{0}".format(patched_package_name))
-            elif len(patched_package_paths) > 1:
-                raise Exception("Found multiple files "
-                                "{0}".format(patched_package_name))
-            else:
-                patched_package_path = patched_package_paths[0]
-            shutil.copy(patched_package_path, directory)
+        global developer_disable_patching
+        if developer_disable_patching:
+            tasks = []
+            for task in self._tasks:
+                package_name, package_path, directory, release = task
+                check.file_exists(package_path)
+                tasks.append((package_name, package_path, directory))
+            hidden_subprocess.function_call_list(
+                "Copying", shutil.copy, tasks)
+        else:
+            hidden_subprocess.function_call_list(
+                "Patching", self.__patch_package, self._tasks)
 
     def __prepare_image(self, graphs):
         """

@@ -195,28 +195,9 @@ def download_directory(url, target, check_url, authenticator):
                                     target, check_url)
 
     file_paths = files.find_fast(target, ".*")
-    i_file = 1
-    len_name_max = 30
-    num_pluses_max = 25
+    tasks = []
     for file_path in file_paths:
         file_url = url + os.path.relpath(file_path, target)
         file_name = os.path.basename(file_path)
-        sys.stdout.write("\r")
-        ratio = float(i_file) / float(len(file_paths))
-        num_pluses = int(float(ratio) * float(num_pluses_max))
-        pluses = "{s:+<{n}}".format(s="", n=num_pluses)
-        progress = "[{0}/{1}]".format(i_file, len(file_paths))
-        sys.stdout.write(
-            "Downloading: {file_name: <{len_name}.{len_name}} "
-            "{bar: <{len_bar}.{len_bar}} "
-            "{progress: "
-            ">{len_progress}."
-            "{len_progress}}".format(file_name=file_name,
-                                     len_name=len_name_max,
-                                     bar=pluses, len_bar=num_pluses_max,
-                                     progress=progress,
-                                     len_progress=len(progress)))
-        sys.stdout.flush()
-        download_file(file_url, file_path)
-        i_file = i_file + 1
-    sys.stdout.write('\n')
+        tasks.append((file_name, file_url, file_path))
+    hidden_subprocess.function_call_list("Downloading", download_file, tasks)
