@@ -172,27 +172,59 @@ def silent_function_call(function, *arguments):
     return result
 
 
-def function_call_list(comment, function, tasks):
+def print_status(comment, name, n_tasks_done, n_tasks):
+    """
+    Prints progress bar status.
+
+    @param comment      Comment about what is being done.
+    @param name         The name of task.
+    @param n_tasks_done The number of completed tasks.
+    @param n_tasks      The total number of tasks
+    """
     len_name_max = 30
     num_pluses_max = 25
+    sys.stdout.write("\r")
+    ratio = float(n_tasks_done) / float(n_tasks)
+    num_pluses = int(float(ratio) * float(num_pluses_max))
+    pluses = "{s:+<{n}}".format(s="", n=num_pluses)
+    progress = "[{0}/{1}]".format(n_tasks_done, n_tasks)
+    sys.stdout.write(
+        "{comment}: {name: <{len_name}.{len_name}} "
+        "{bar: <{len_bar}.{len_bar}} "
+        "{progress: >{len_progress}."
+        "{len_progress}}".format(comment=comment, name=name,
+                                 len_name=len_name_max, bar=pluses,
+                                 len_bar=num_pluses_max, progress=progress,
+                                 len_progress=len(progress)))
+    sys.stdout.flush()
+
+
+def function_call_list(comment, function, tasks):
     i_task = 1
     sys.stdout.write('\n')
     for task in tasks:
-        sys.stdout.write("\r")
-        ratio = float(i_task) / float(len(tasks))
-        num_pluses = int(float(ratio) * float(num_pluses_max))
-        pluses = "{s:+<{n}}".format(s="", n=num_pluses)
-        progress = "[{0}/{1}]".format(i_task, len(tasks))
-        sys.stdout.write(
-            "{comment}: {name: <{len_name}.{len_name}} "
-            "{bar: <{len_bar}.{len_bar}} "
-            "{progress: >{len_progress}."
-            "{len_progress}}".format(comment=comment, name=task[0],
-                                     len_name=len_name_max, bar=pluses,
-                                     len_bar=num_pluses_max, progress=progress,
-                                     len_progress=len(progress)))
-        sys.stdout.flush()
+        print_status(comment, task[0], i_task, len(tasks))
         arguments = task[1:]
         function(*arguments)
         i_task += 1
+    sys.stdout.write('\n')
+
+
+global_status_callback = None
+
+
+def print_status_dynamic():
+    comment, name, n_tasks_done, n_tasks = global_status_callback()
+    print_status(comment, name, n_tasks_done, n_tasks)
+
+
+def function_call_monitor(function, status_callback):
+    sys.stdout.write('\n')
+    global global_status_callback
+    global_status_callback = status_callback
+    timer = RepeatingTimer(latency, print_status_dynamic)
+    timer.daemon = True
+    timer.start()
+    function()
+    timer.cancel()
     sys.stdout.write('\n')

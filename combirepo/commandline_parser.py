@@ -128,6 +128,9 @@ class CommandlineParser():
         self._parser.add_argument("-c", "--config", type=str, action="store",
                                   dest="config", help="Use the custom config "
                                   "file instead of default one.")
+        self._parser.add_argument("-j", "--jobs", type=int, action="store",
+                                  dest="jobs_number", help="Number of "
+                                  "parallel jobs", default=1)
 
     def __register_mic_related_options(self):
         """
@@ -267,6 +270,7 @@ class CommandlineParser():
             logging.basicConfig(level=logging_level)
 
         config_parser.initialize_config(arguments.config)
+        repository_combiner.jobs_number = arguments.jobs_number
 
     def __build_repository_pairs(self, arguments):
         """

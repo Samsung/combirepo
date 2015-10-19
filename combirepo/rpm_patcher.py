@@ -146,6 +146,8 @@ class RpmPatcher():
         self.qemu_path = developer_qemu_path
         self.patching_root = None
         self._tasks = []
+        self._targets = {}
+        self._package_names = {}
         self._graphs = graphs
 
     def __find_platform_images(self):
@@ -399,72 +401,85 @@ class RpmPatcher():
             else:
                 raise Exception("Impossible happened.")
 
-    def __create_patched_package(self, queue, package_name, release):
+    def __create_patched_packages(self):
         """
         Patches the given package using rpmrebuild and the patching root.
-
-        @param queue            The queue used for saving the resulting file
-                                name.
-        @param package_name     The basename of the package.
-        @param release          The release number of the corresponding
-                                non-marked package.
         """
-        logging.debug("Chrooting to the directory "
-                      "{0}".format(self.patching_root))
         os.chroot(self.patching_root)
         os.chdir("/")
-        check.file_exists(package_name)
-        result = rebuild_rpm_package(package_name, release)
-        queue.put(result)
+        make_command = ["make", "-j{0}".format(
+            repository_combiner.jobs_number)]
+        if not hidden_subprocess.visible_mode:
+            make_command.append("--silent")
+        subprocess.call(make_command)
 
-    def add_task(self, package_name, package_path, directory, release):
+    def add_task(self, package_name, package_path, location_to, release):
         """
         Adds a task to the RPM patcher.
 
         @param package_name     The name of package.
         @param package_path     The path to the marked package.
-        @param directory        The destination directory where to save the
-                                package copy.
+        @param location_to      The destination location.
         @param release          The release number of the corresponding
                                 non-marked package.
         """
-        self._tasks.append((package_name, package_path, directory, release))
+        self._tasks.append((package_name, package_path, location_to, release))
 
-    def __patch_package(self, package_path, directory, release):
+    def __patch_packages(self):
         """
-        Patches on package.
-        @param package_path     The path to the marked package.
-        @param directory        The destination directory where to save the
-                                package copy.
-        @param release          The release number of the corresponding
-                                non-marked package.
+        Patches all packages.
         """
-        check.file_exists(package_path)
-        shutil.copy(package_path, self.patching_root)
-        package_name = os.path.basename(package_path)
-
-        queue = multiprocessing.Queue()
-        child = multiprocessing.Process(
-            target=self.__create_patched_package,
-            args=(queue, package_name, release,))
+        child = multiprocessing.Process(target=self.__create_patched_packages,
+                                        args=())
         child.start()
         child.join()
-        patched_package_name = os.path.basename(queue.get())
-        logging.debug("The package has been rebuilt to adjust release "
-                      "numbers: {0}".format(patched_package_name))
-        expression = re.escape(patched_package_name)
-        patched_package_paths = files.find_fast(self.patching_root,
-                                                expression)
-        patched_package_path = None
-        if len(patched_package_paths) < 1:
-            raise Exception("Failed to find file "
-                            "{0}".format(patched_package_name))
-        elif len(patched_package_paths) > 1:
-            raise Exception("Found multiple files "
-                            "{0}".format(patched_package_name))
+
+    def _generate_makefile(self):
+        """
+        Generates makefile for given tasks.
+        """
+        makefile_path = os.path.join(self.patching_root, "Makefile")
+        results_path = os.path.join(self.patching_root, "rpmrebuild_results")
+        if os.path.isdir(results_path):
+            shutil.rmtree(results_path)
+        os.mkdir(results_path)
+        with open(makefile_path, "wb") as makefile:
+            makefile.write("all:")
+            for task in self._tasks:
+                package_name, _, _, _ = task
+                makefile.write(" {0}".format(package_name))
+            makefile.write("\n")
+            for task in self._tasks:
+                package_name, package_path, _, release = task
+                package_file_name = os.path.basename(package_path)
+                makefile.write("\n")
+                makefile.write("{0}: {1}\n".format(
+                    package_name, package_file_name))
+                makefile.write("\trpmrebuild --release={0} -p -n -d "
+                               "/rpmrebuild_results {1} >/dev/null 2>/dev/null"
+                               "\n".format(release, package_file_name))
+
+    def _get_results(self):
+        results_path = os.path.join(self.patching_root, "rpmrebuild_results")
+        paths = files.find_fast(results_path, ".*\.rpm")
+        results = []
+        for path in paths:
+            name = self._package_names[os.path.basename(path)]
+            if name is None:
+                continue
+            result_path = os.path.realpath(path)
+            modification_time = os.path.getmtime(result_path)
+            results.append((name, result_path, modification_time))
+        results.sort(key=lambda tup: tup[2])
+        return results
+
+    def _status_callback(self):
+        results = self._get_results()
+        if len(results) > 0:
+            last_name, _, _ = results[-1]
         else:
-            patched_package_path = patched_package_paths[0]
-        shutil.copy(patched_package_path, directory)
+            last_name, _, _, _ = self._tasks[0]
+        return "Patching", last_name, len(results), len(self._tasks)
 
     def do_tasks(self):
         """
@@ -476,14 +491,33 @@ class RpmPatcher():
         if developer_disable_patching:
             tasks = []
             for task in self._tasks:
-                package_name, package_path, directory, release = task
+                package_name, package_path, target, _ = task
                 check.file_exists(package_path)
-                tasks.append((package_name, package_path, directory))
+                tasks.append((package_name, package_path, target))
             hidden_subprocess.function_call_list(
                 "Copying", shutil.copy, tasks)
         else:
+            copy_tasks = []
+            directories = {}
+            for task in self._tasks:
+                package_name, package_path, target, _ = task
+                copy_tasks.append((package_name, package_path,
+                                   self.patching_root))
+                self._targets[package_name] = target
+                self._package_names[os.path.basename(target)] = package_name
             hidden_subprocess.function_call_list(
-                "Patching", self.__patch_package, self._tasks)
+                "Copying", shutil.copy, copy_tasks)
+            self._generate_makefile()
+            hidden_subprocess.function_call_monitor(
+                self.__patch_packages, self._status_callback)
+            results = self._get_results()
+            copy_tasks = []
+            for info in results:
+                name, path, _ = info
+                target = self._targets[name]
+                copy_tasks.append((name, path, target))
+            hidden_subprocess.function_call_list(
+                "Copying", shutil.copy, copy_tasks)
 
     def __prepare_image(self, graphs):
         """

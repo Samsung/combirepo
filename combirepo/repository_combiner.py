@@ -30,6 +30,7 @@ from repository_manager import RepositoryManager
 
 repodata_regeneration_enabled = False
 target_arhcitecture = None
+jobs_number = 1
 
 
 def build_forward_dependencies(graph, package):
@@ -170,7 +171,10 @@ def construct_combined_repository(graph, marked_graph, marked_packages,
                 logging.debug("Release numbers of package {0} differ: "
                               "{1} and {2}".format(package, release,
                                                    release_marked))
-                rpm_patcher.add_task(package, location_from, repository_path,
+                location_original = graph.vs[package_id]["location"]
+                new_name = os.path.basename(location_original)
+                location_to = os.path.join(repository_path, new_name)
+                rpm_patcher.add_task(package, location_from, location_to,
                                      release)
             else:
                 shutil.copy(location_from, repository_path)
