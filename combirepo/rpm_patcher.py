@@ -86,40 +86,64 @@ def prepare_minimal_packages_list(graphs):
     return packages
 
 
-def rebuild_rpm_package(package_name, release):
+def build_requirement_command(update):
     """
-    Rebuilds the RPM package so that to adjust it release number.
+    Builds the sed command that will update the requirement to the proper
+    value.
 
-    @param package_name     The path to the package.
-    @param release          The required release number.
-    @return                 The name of patched package.
+    @param update                   The tuple specifying the update.
     """
+    action, symbol, details = update
+    relation, epoch, version, release = details
+    requirement = symbol
+    operator = None
+    if relation is not None:
+        if relation == "EQ":
+            operator = "="
+        elif relation == "GE":
+            operator = ">="
+        elif relation == "LE":
+            operator = "<="
+        else:
+            raise Exception("Relation \"{0}\" is not implemented!".format(
+                relation))
+    if operator is not None:
+        requirement += " {0} ".format(operator)
+        if version is None:
+            raise Exception("Relation \"{0}\" presents, but no version "
+                            "presents!".format(relation))
+        requirement += "{0}".format(version)
+        if release is not None:
+            requirement += "-{0}".format(release)
+    logging.debug("The requirement is the following: {0}".format(requirement))
+    command = None
+    if action == "add":
+        command = "/^Requires:/i\\Requires: {0}".format(requirement)
+    elif action == "change":
+        pattern = "^Requires:.*{0}.*".format(symbol)
+        command = "s/{0}/Requires: {1}/g".format(pattern, requirement)
+    else:
+        raise Exception("Action \"{0}\" is not implemented!".format(action))
+    return command
 
-    rpmrebuild_command = ["rpmrebuild",
-                          "--release={0}".format(release), "-p", "-n",
-                          package_name]
-    logging.debug("Running command: "
-                  "{0}".format(" ".join(rpmrebuild_command)))
-    log_file_name = temporaries.create_temporary_file("rpmrebuild.log")
-    with open(log_file_name, 'w') as log_file:
-        code = subprocess.call(rpmrebuild_command, stdout=log_file,
-                               stderr=log_file)
-    if code != 0:
-        logging.error("The subprocess failed!")
-        logging.error("STDERR output:")
-        with open(log_file_name, 'r') as log_file:
-            logging.error("{0}".format(log_file.read()))
 
-    result = None
-    with open(log_file_name, 'r') as log_file:
-        for line in log_file:
-            if line.startswith("result: "):
-                result = line.replace("result: ", "")
-                result = result.replace("\n", "")
-    if result is None:
-        logging.error("Failed to patch RPM file!")
-        sys.exit("Error.")
-    return result
+def create_patched_packages(queue):
+    """
+    Patches the given package using rpmrebuild and the patching root.
+
+    @param root             The root to be used.
+    """
+    root = queue.get()
+    logging.debug("Chrooting to {0}".format(root))
+    os.chroot(root)
+    logging.debug("Chrooting to {0} done.".format(root))
+    os.chdir("/")
+    make_command = ["make"]
+    if not hidden_subprocess.visible_mode:
+        make_command.append("--silent")
+    subprocess.call(make_command)
+    logging.debug("Exiting from {0}".format(root))
+    queue.task_done()
 
 
 class RpmPatcher():
@@ -145,6 +169,7 @@ class RpmPatcher():
         global developer_qemu_path
         self.qemu_path = developer_qemu_path
         self.patching_root = None
+        self.patching_root_clones = []
         self._tasks = []
         self._targets = {}
         self._package_names = {}
@@ -401,19 +426,8 @@ class RpmPatcher():
             else:
                 raise Exception("Impossible happened.")
 
-    def __create_patched_packages(self):
-        """
-        Patches the given package using rpmrebuild and the patching root.
-        """
-        os.chroot(self.patching_root)
-        os.chdir("/")
-        make_command = ["make", "-j{0}".format(
-            repository_combiner.jobs_number)]
-        if not hidden_subprocess.visible_mode:
-            make_command.append("--silent")
-        subprocess.call(make_command)
-
-    def add_task(self, package_name, package_path, location_to, release):
+    def add_task(self, package_name, package_path, location_to, release,
+                 updates):
         """
         Adds a task to the RPM patcher.
 
@@ -422,54 +436,83 @@ class RpmPatcher():
         @param location_to      The destination location.
         @param release          The release number of the corresponding
                                 non-marked package.
+        @param updates          The requirements updates to be performed.
         """
-        self._tasks.append((package_name, package_path, location_to, release))
+        self._tasks.append((package_name, package_path, location_to, release,
+                            updates))
 
     def __patch_packages(self):
         """
         Patches all packages.
         """
-        child = multiprocessing.Process(target=self.__create_patched_packages,
-                                        args=())
-        child.start()
-        child.join()
+        logging.debug("Creatin pool with {0} "
+                      "workers.".format(repository_combiner.jobs_number))
+        pool = multiprocessing.Manager().Pool(repository_combiner.jobs_number)
+        queue = multiprocessing.Manager().JoinableQueue()
+        for root in self.patching_root_clones:
+            queue.put(root)
+        for i in range(repository_combiner.jobs_number):
+            result = pool.apply_async(
+                create_patched_packages, (queue,))
+        pool.close()
+        queue.join()
 
-    def _generate_makefile(self):
+    def _generate_makefile(self, root, tasks):
         """
         Generates makefile for given tasks.
+
+        @param root             The root to be used.
+        @param tasks            The list of tasks.
         """
-        makefile_path = os.path.join(self.patching_root, "Makefile")
-        results_path = os.path.join(self.patching_root, "rpmrebuild_results")
+        makefile_path = os.path.join(root, "Makefile")
+        results_path = os.path.join(root, "rpmrebuild_results")
         if os.path.isdir(results_path):
             shutil.rmtree(results_path)
         os.mkdir(results_path)
         with open(makefile_path, "wb") as makefile:
             makefile.write("all:")
-            for task in self._tasks:
-                package_name, _, _, _ = task
+            for task in tasks:
+                package_name, _, _, _, _ = task
                 makefile.write(" {0}".format(package_name))
             makefile.write("\n")
-            for task in self._tasks:
-                package_name, package_path, _, release = task
+            for task in tasks:
+                package_name, package_path, _, release, updates = task
                 package_file_name = os.path.basename(package_path)
                 makefile.write("\n")
                 makefile.write("{0}: {1}\n".format(
                     package_name, package_file_name))
-                makefile.write("\trpmrebuild --release={0} -p -n -d "
-                               "/rpmrebuild_results {1} >/dev/null 2>/dev/null"
-                               "\n".format(release, package_file_name))
+                commands = []
+                commands.append("s/^Release:.*/Release: {0}/g".format(release))
+                for update in updates:
+                    command = build_requirement_command(update)
+                    commands.append(command)
+                sed_command = "sed"
+                for command in commands:
+                    sed_command += " -e \"{0}\"".format(command)
+                makefile.write("\trpmrebuild -f \'{0}\' -p -n -d "
+                               "/rpmrebuild_results "
+                               "{1}".format(sed_command,
+                                            package_file_name))
+                if logging.getLogger().getEffectiveLevel() != logging.DEBUG:
+                    makefile.write(" >/dev/null 2>/dev/null")
+                makefile.write(" ; \\\n")
+                makefile.write("\trm -rf /home/*\n")
+
+        if logging.getLogger().getEffectiveLevel() == logging.DEBUG:
+            subprocess.call(["cat", makefile_path])
 
     def _get_results(self):
-        results_path = os.path.join(self.patching_root, "rpmrebuild_results")
-        paths = files.find_fast(results_path, ".*\.rpm")
         results = []
-        for path in paths:
-            name = self._package_names[os.path.basename(path)]
-            if name is None:
-                continue
-            result_path = os.path.realpath(path)
-            modification_time = os.path.getmtime(result_path)
-            results.append((name, result_path, modification_time))
+        for root in self.patching_root_clones:
+            results_path = os.path.join(root, "rpmrebuild_results")
+            paths = files.find_fast(results_path, ".*\.rpm")
+            for path in paths:
+                name = self._package_names[os.path.basename(path)]
+                if name is None:
+                    continue
+                result_path = os.path.realpath(path)
+                modification_time = os.path.getmtime(result_path)
+                results.append((name, result_path, modification_time))
         results.sort(key=lambda tup: tup[2])
         return results
 
@@ -478,7 +521,7 @@ class RpmPatcher():
         if len(results) > 0:
             last_name, _, _ = results[-1]
         else:
-            last_name, _, _, _ = self._tasks[0]
+            last_name, _, _, _, _ = self._tasks[0]
         return "Patching", last_name, len(results), len(self._tasks)
 
     def do_tasks(self):
@@ -491,23 +534,44 @@ class RpmPatcher():
         if developer_disable_patching:
             tasks = []
             for task in self._tasks:
-                package_name, package_path, target, _ = task
+                package_name, package_path, target, _, _ = task
                 check.file_exists(package_path)
                 tasks.append((package_name, package_path, target))
             hidden_subprocess.function_call_list(
                 "Copying", shutil.copy, tasks)
         else:
-            copy_tasks = []
-            directories = {}
-            for task in self._tasks:
-                package_name, package_path, target, _ = task
-                copy_tasks.append((package_name, package_path,
-                                   self.patching_root))
-                self._targets[package_name] = target
-                self._package_names[os.path.basename(target)] = package_name
+            clone_tasks = []
+            for i in range(repository_combiner.jobs_number):
+                clone_path = temporaries.create_temporary_directory(
+                    "patching_root_clone.{0}".format(i))
+                shutil.rmtree(clone_path)
+                self.patching_root_clones.append(clone_path)
+                clone_tasks.append(
+                    ("chroot #{0}".format(i),
+                     ["cp", "-a", self.patching_root, clone_path]))
             hidden_subprocess.function_call_list(
-                "Copying", shutil.copy, copy_tasks)
-            self._generate_makefile()
+                "Cloning", subprocess.call, clone_tasks)
+            self._tasks.sort(key=lambda task: os.stat(task[1]).st_size)
+            for i in range(repository_combiner.jobs_number):
+                tasks = []
+                i_task = i
+                while i_task < len(self._tasks):
+                    tasks.append(self._tasks[i_task])
+                    i_task += repository_combiner.jobs_number
+
+                copy_tasks = []
+                directories = {}
+                for task in tasks:
+                    package_name, package_path, target, _, _ = task
+                    copy_tasks.append((package_name, package_path,
+                                       self.patching_root_clones[i]))
+                    self._targets[package_name] = target
+                    basename = os.path.basename(target)
+                    self._package_names[basename] = package_name
+                hidden_subprocess.function_call_list(
+                    "Copying", shutil.copy, copy_tasks)
+                self._generate_makefile(self.patching_root_clones[i], tasks)
+
             hidden_subprocess.function_call_monitor(
                 self.__patch_packages, self._status_callback)
             results = self._get_results()

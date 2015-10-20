@@ -135,6 +135,59 @@ def check_rpm_versions(graph, marked_graph, packages):
     sys.exit("Error.")
 
 
+def get_requirements_updates(package_name, requirements_tuples,
+                             requirements_marked_tuples):
+    """
+    Gets the list of requirements that should be updated in the marked RPM
+    package.
+
+    @param package_name                 The name of RPM package.
+    @param requirements_tuples          The list of requirements of the
+                                        original package.
+    @param requirements_tuples_marked   The list of requirements of the marked
+                                        package.
+    @return                             The list of requirements of the
+                                        original package that are different
+                                        from marked ones.
+    """
+    logging.debug("Processing requirements of package "
+                  "{0}".format(package_name))
+    requirements = {}
+    for requirement_tuple in requirements_tuples:
+        symbol, relation, numbers = requirement_tuple
+        epoch, version, release = numbers
+        requirements[symbol] = (relation, epoch, version, release)
+    requirements_marked = {}
+    for requirement_tuple in requirements_marked_tuples:
+        symbol, relation, numbers = requirement_tuple
+        epoch, version, release = numbers
+        requirements_marked[symbol] = (relation, epoch, version, release)
+
+    updates = []
+    for symbol in requirements.keys():
+        if symbol not in requirements_marked.keys():
+            logging.warning("  Marked package \"{0}\" has lost requirement "
+                            "\"{1}\"".format(package_name, symbol))
+            updates.append(("add", symbol, requirements[symbol]))
+            continue
+        for i in range(len(requirements[symbol])):
+            if requirements[symbol][i] != requirements_marked[symbol][i]:
+                logging.debug("  Detected difference in requirement "
+                              "{0}:".format(symbol))
+                logging.debug("   * {0}".format(requirements[symbol]))
+                logging.debug("   * {0}".format(requirements_marked[symbol]))
+                updates.append(("change", symbol, requirements[symbol]))
+                break
+    for symbol in requirements_marked.keys():
+        if symbol not in requirements.keys():
+            logging.debug("  Marked-specific requirement: "
+                          "{0} {1}".format(symbol,
+                                           requirements_marked[symbol]))
+    if len(updates) > 0:
+        logging.debug("  Found {0} updates".format(len(updates)))
+    return updates
+
+
 def construct_combined_repository(graph, marked_graph, marked_packages,
                                   if_mirror, rpm_patcher):
     """
@@ -153,6 +206,7 @@ def construct_combined_repository(graph, marked_graph, marked_packages,
     check_rpm_versions(graph, marked_graph, marked_packages)
     repository_path = temporaries.create_temporary_directory("combirepo")
     packages_not_found = []
+    copy_tasks = []
 
     for package in marked_packages:
         marked_package_id = marked_graph.get_name_id(package)
@@ -164,20 +218,29 @@ def construct_combined_repository(graph, marked_graph, marked_packages,
 
         package_id = graph.get_name_id(package)
         if package_id is None:
-            shutil.copy(location_from, repository_path)
+            copy_tasks.append((package, location_from, repository_path))
         else:
             release = graph.vs[package_id]["release"]
+            location_original = graph.vs[package_id]["location"]
+            new_name = os.path.basename(location_original)
+            location_to = os.path.join(repository_path, new_name)
+            if_patching_needed = False
             if release != release_marked:
                 logging.debug("Release numbers of package {0} differ: "
                               "{1} and {2}".format(package, release,
                                                    release_marked))
-                location_original = graph.vs[package_id]["location"]
-                new_name = os.path.basename(location_original)
-                location_to = os.path.join(repository_path, new_name)
+                if_patching_needed = True
+            updates = get_requirements_updates(
+                package, graph.vs[package_id]["requirements"],
+                marked_graph.vs[marked_package_id]["requirements"])
+            if len(updates) > 0:
+                logging.debug("Requirements updates are necessary.")
+                if_patching_needed = True
+            if if_patching_needed:
                 rpm_patcher.add_task(package, location_from, location_to,
-                                     release)
+                                     release, updates)
             else:
-                shutil.copy(location_from, repository_path)
+                copy_tasks.append((package, location_from, repository_path))
 
     if len(packages_not_found) != 0:
         for package in packages_not_found:
@@ -200,7 +263,9 @@ def construct_combined_repository(graph, marked_graph, marked_packages,
                          "used.".format(package))
         package_id = graph.get_name_id(package)
         location_from = graph.vs[package_id]["location"]
-        shutil.copy(location_from, repository_path)
+        copy_tasks.append((package, location_from, repository_path))
+
+    hidden_subprocess.function_call_list("Copying", shutil.copy, copy_tasks)
 
     if logging.getLogger().getEffectiveLevel() == logging.DEBUG:
         hidden_subprocess.silent_call(["ls", "-l", repository_path])

@@ -524,6 +524,7 @@ class DependencyGraphBuilder():
         locations = []
         versions = []
         releases = []
+        requirements = []
         for package in packages:
             full_name = _get_full_package_name(package)
             logging.debug("Processing package {0} with full name "
@@ -544,17 +545,24 @@ class DependencyGraphBuilder():
             locations.append(location)
             versions.append(package.version)
             releases.append(package.release)
+            logging.debug("Package {0} requires following "
+                          "symbols:".format(package.name))
+            for requirement in package.requires:
+                logging.debug(" * {0}".format(requirement))
+            requirements.append(package.requires)
             i = i + 1
         graph.vs["name"] = names
         graph.vs["full_name"] = full_names
         graph.vs["location"] = locations
         graph.vs["version"] = versions
         graph.vs["release"] = releases
+        graph.vs["requirements"] = requirements
         back_graph.vs["name"] = names
         back_graph.vs["full_name"] = full_names
         back_graph.vs["location"] = locations
         back_graph.vs["version"] = versions
         back_graph.vs["release"] = releases
+        back_graph.vs["requirements"] = requirements
 
         edges = []
         back_edges = []
