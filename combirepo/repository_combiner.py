@@ -244,8 +244,8 @@ def construct_combined_repository(graph, marked_graph, marked_packages,
 
     if len(packages_not_found) != 0:
         for package in packages_not_found:
-            logging.error("Marked package {0} not found in marked "
-                          "repository".format(package))
+            logging.warning("Marked package {0} not found in marked "
+                            "repository".format(package))
         if not if_mirror:
             logging.error("The above listed packages were not found in "
                           "marked repository.\n"
@@ -260,7 +260,7 @@ def construct_combined_repository(graph, marked_graph, marked_packages,
                 continue
         if package in packages_not_found:
             logging.info("Package {0} from original repository will be "
-                         "used.".format(package))
+                         "used (mirror mode is on).".format(package))
         package_id = graph.get_name_id(package)
         location_from = graph.vs[package_id]["location"]
         copy_tasks.append((package, location_from, repository_path))
