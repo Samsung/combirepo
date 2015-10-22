@@ -282,6 +282,7 @@ def _search_dependencies(yum_sack, package, providers, preferables, strategy):
     unprovided_symbols = Set()
 
     for requirement in package.returnPrco('requires'):
+        logging.debug("   requirement: {0}".format(requirement))
         requirement_name = requirement[0]
 
         if requirement_name.startswith("rpmlib"):
@@ -569,25 +570,42 @@ class DependencyGraphBuilder():
         if self.packages is None or len(self.packages) == 0:
             self.packages = yum_sack.returnPackages()
         packages_scope = Set(self.packages)
-        for package in yum_sack.returnPackages():
-            if package.name not in packages_scope:
-                continue
-            dependencies, provided, unprovided = _search_dependencies(
-                yum_sack, package, providers, self.preferables, self.strategy)
+        package_names = [package.name for package in yum_sack.returnPackages()]
+        for package in packages_scope:
+            if package not in package_names:
+                packages_scope = packages_scope - Set([package])
+        packages_processed = Set([])
+        while len(packages_processed) < len(packages_scope):
+            logging.debug("Processed {0} packages from "
+                          "{1}".format(len(packages_processed),
+                                       len(packages_scope)))
+            logging.debug("   Remaining: "
+                          "{0}".format(packages_scope - packages_processed))
+            for package in yum_sack.returnPackages():
+                if package.name in packages_processed:
+                    continue
+                if package.name not in packages_scope:
+                    logging.debug(" * Package {0} is still not "
+                                  "processed.".format(package.name))
+                    continue
+                dependencies, provided, unprovided = _search_dependencies(
+                    yum_sack, package, providers, self.preferables,
+                    self.strategy)
 
-            provided = graph.provided_symbols | provided
-            unprovided = graph.unprovided_symbols | unprovided
-            graph.provided_symbols = provided
-            graph.unprovided_symbols = unprovided
+                provided = graph.provided_symbols | provided
+                unprovided = graph.unprovided_symbols | unprovided
+                graph.provided_symbols = provided
+                graph.unprovided_symbols = unprovided
 
-            for dependency in dependencies:
-                id_begin = graph.get_name_id(package.name)
-                id_end = graph.get_name_id(dependency)
-                edges.append((id_begin, id_end))
-                back_edges.append((id_end, id_begin))
-                if dependency not in self.packages:
-                    packages_scope = packages_scope | Set([dependency])
-            packages_scope = packages_scope - Set([package.name])
+                for dependency in dependencies:
+                    id_begin = graph.get_name_id(package.name)
+                    id_end = graph.get_name_id(dependency)
+                    edges.append((id_begin, id_end))
+                    back_edges.append((id_end, id_begin))
+                    if (dependency not in packages_scope and
+                            dependency not in packages_processed):
+                        packages_scope = packages_scope | Set([dependency])
+                packages_processed = packages_processed | Set([package.name])
 
         graph.add_edges(edges)
         back_graph.add_edges(back_edges)
