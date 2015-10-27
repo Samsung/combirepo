@@ -216,7 +216,7 @@ class CommandlineParser():
             "specify the path either to RPM package with qemu or to the "
             "working qemu executable itself.")
         self._parser.add_argument(
-            "--cachedir", action="store", type=str, dest="cachedir",
+            "--tmp-dir", action="store", type=str, dest="cachedir",
             help="Path to cache directory for the tool "
             "(default is /var/tmp/combirepo).")
         self._parser.add_argument(
