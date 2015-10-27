@@ -217,8 +217,8 @@ class CommandlineParser():
             "working qemu executable itself.")
         self._parser.add_argument(
             "--cachedir", action="store", type=str, dest="cachedir",
-            default="/var/tmp/combirepo", help="Path to cache directory "
-            "for the tool.")
+            help="Path to cache directory for the tool "
+            "(default is /var/tmp/combirepo).")
         self._parser.add_argument(
             "--regenerate-repodata", action="store_true", default=False,
             dest="regenerate_repodata", help="Force repodata regeneration "
@@ -364,15 +364,8 @@ class CommandlineParser():
         if arguments.password is not None:
             parameters.password = arguments.password
 
-        if not os.path.isdir(arguments.cachedir):
-            logging.warning("Creating combirepo temporary directory "
-                            "{0} ...".format(arguments.cachedir))
-            os.mkdir(arguments.cachedir)
-        parameters.temporary_directory_path = arguments.cachedir
-        directory = os.path.join(arguments.cachedir, "temporaries")
-        temporaries.default_directory = os.path.abspath(directory)
-        if not os.path.isdir(temporaries.default_directory):
-            os.mkdir(temporaries.default_directory)
+        if arguments.cachedir is not None:
+            parameters.temporary_directory_path = arguments.cachedir
 
         # Process developer options related with RPM patcher:
         rpm_patcher.developer_outdir_original = arguments.outdir_original

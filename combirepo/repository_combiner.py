@@ -31,6 +31,7 @@ from repository_manager import RepositoryManager
 repodata_regeneration_enabled = False
 target_arhcitecture = None
 jobs_number = 1
+repository_cache_directory_path = None
 
 
 def build_forward_dependencies(graph, package):
@@ -728,7 +729,6 @@ def prepare_repositories(parameters):
     """
     repository_pairs = parameters.repository_pairs
     kickstart_file_path = parameters.kickstart_file_path
-    cache_directory_path = parameters.temporary_directory_path
     if len(repository_pairs) == 0:
         raise Exception("No repository pairs given!")
     # Check that user has given correct arguments for repository names:
@@ -738,11 +738,7 @@ def prepare_repositories(parameters):
         logging.info("Kickstart file {0} specified by user will be "
                      "used".format(kickstart_file_path))
         check_repository_names(names, kickstart_file_path)
-
-    repository_cache_directory_path = os.path.join(cache_directory_path,
-                                                   "repositories")
-    if not os.path.isdir(repository_cache_directory_path):
-        os.mkdir(repository_cache_directory_path)
+    global repository_cache_directory_path
     repository_manager = RepositoryManager(repository_cache_directory_path,
                                            check_rpm_name)
     authenticator = base64.encodestring("{0}:{1}".format(parameters.user,
@@ -811,12 +807,47 @@ def resolve_groups(repositories, kickstart_file_path):
     return packages_all
 
 
+def initialize_cache_directories(temporary_directory_path):
+    """
+    Initializes cache directories specified by user or set by default.
+
+    @param temporary_directory_path The path to cache directory root.
+    """
+    if temporary_directory_path is None:
+        temporary_directory_path = "/var/tmp/combirepo"
+        logging.debug("Using default cache directory "
+                      "{0}".format(temporary_directory_path))
+    else:
+        temporary_directory_path = os.path.realpath(temporary_directory_path)
+        logging.debug("Using custom cache directory "
+                      "{0}".format(temporary_directory_path))
+    if not os.path.isdir(temporary_directory_path):
+        os.makedirs(temporary_directory_path)
+        logging.debug("Created cache directory "
+                      "{0}".format(temporary_directory_path))
+    temporaries.default_directory = os.path.join(temporary_directory_path,
+                                                 "temporaries")
+    if not os.path.isdir(temporaries.default_directory):
+        os.makedirs(temporaries.default_directory)
+        logging.debug("Created directory for temporary files "
+                      "{0}".format(temporaries.default_directory))
+    global repository_cache_directory_path
+    repository_cache_directory_path = os.path.join(temporary_directory_path,
+                                                   "repositories")
+    if not os.path.isdir(repository_cache_directory_path):
+        os.makedirs(repository_cache_directory_path)
+        logging.debug("Created directory fir repositories "
+                      "{0}".format(repository_cache_directory_path))
+
+
 def combine(parameters):
     """
     Combines the repostories based on parameters structure.
 
     @param parameters   The parameters of combirepo run.
     """
+    initialize_cache_directories(parameters.temporary_directory_path)
+
     global target_arhcitecture
     target_arhcitecture = parameters.architecture
     parameters.kickstart_file_path = prepare_repositories(parameters)

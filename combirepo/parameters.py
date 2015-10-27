@@ -82,7 +82,8 @@ class RepositoryCombinerParameters(object):
     @property
     def temporary_directory_path(self):
         """The directory where combirepo stores its cache."""
-        check.directory_exists(self._temporary_directory_path)
+        if self._temporary_directory_path is not None:
+            check.directory_exists(self._temporary_directory_path)
         return self._temporary_directory_path
 
     @temporary_directory_path.setter

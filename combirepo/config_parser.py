@@ -163,6 +163,10 @@ class ConfigParser():
         self.__check_option_exists("general", "profile")
         parameters.profile_name = self.parser.get("general", "profile")
 
+        if self.parser.has_option("general", "tmp_dir"):
+            path = self.parser.get("general", "tmp_dir")
+            parameters.temporary_directory_path = path
+
         # Parse profile section:
         profile_name = parameters.profile_name
         self.__check_section_exists(profile_name)
