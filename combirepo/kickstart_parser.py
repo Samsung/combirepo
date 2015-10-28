@@ -63,7 +63,7 @@ class KickstartFile():
         with open(self.path, "w") as kickstart_file:
             kickstart_file.writelines(lines)
 
-    def add_repository_path(self, repository_name, repository_path):
+    def prepend_repository_path(self, repository_name, repository_path):
         """
         Adds the path to thre repository with given name and path.
 
@@ -72,16 +72,15 @@ class KickstartFile():
         """
         lines = []
         with open(self.path, "r") as kickstart_file:
-            if_after_repo = False
+            if_added = False
             for line in kickstart_file:
                 if line.startswith("repo "):
-                    if_after_repo = True
-                elif if_after_repo:
-                    lines.append("repo --name={0} --baseurl=file://{1} "
-                                 "--save  "
-                                 "--ssl_verify=no".format(repository_name,
-                                                          repository_path))
-                    if_after_repo = False
+                    if not if_added:
+                        lines.append(
+                            "repo --name={0} --baseurl=file://{1} --save "
+                            "--ssl_verify=no\n".format(repository_name,
+                                                       repository_path))
+                        if_added = True
                 lines.append(line)
 
         with open(self.path, "w") as kickstart_file:

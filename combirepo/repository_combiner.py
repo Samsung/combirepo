@@ -934,8 +934,8 @@ def combine(parameters):
     shutil.copy(parameters.kickstart_file_path, ks_modified_path)
     kickstart_file = KickstartFile(ks_modified_path)
     if parameters.sup_repo_url is not None:
-        kickstart_file.add_repository_path("supplementary",
-                                           parameters.sup_repo_url)
+        kickstart_file.prepend_repository_path("supplementary",
+                                               parameters.sup_repo_url)
     parameters.kickstart_file_path = ks_modified_path
     create_image(parameters.architecture, names, combined_repositories,
                  parameters.kickstart_file_path,
