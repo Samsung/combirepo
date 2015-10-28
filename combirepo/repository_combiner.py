@@ -32,6 +32,7 @@ repodata_regeneration_enabled = False
 target_arhcitecture = None
 jobs_number = 1
 repository_cache_directory_path = None
+mic_cache_directory_path = None
 
 
 def build_forward_dependencies(graph, package):
@@ -307,10 +308,12 @@ def create_image(arch, repository_names, repository_paths, kickstart_file_path,
         package_manager = "zypp"
 
     # Now create the image using the "mic" tool:
+    global mic_cache_directory_path
     mic_command = ["sudo", "mic", "create", "loop",
                    modified_kickstart_file_path, "-A", arch, "-o",
                    output_directory_path, "--tmpfs",
-                   "--pkgmgr={0}".format(package_manager)]
+                   "--pkgmgr={0}".format(package_manager),
+                   "--cachedir={0}".format(mic_cache_directory_path)]
     if logging.getLogger().getEffectiveLevel() <= logging.DEBUG:
         mic_options.extend(["--debug", "--verbose"])
     if mic_options is not None:
@@ -836,8 +839,14 @@ def initialize_cache_directories(temporary_directory_path):
                                                    "repositories")
     if not os.path.isdir(repository_cache_directory_path):
         os.makedirs(repository_cache_directory_path)
-        logging.debug("Created directory fir repositories "
+        logging.debug("Created directory for repositories "
                       "{0}".format(repository_cache_directory_path))
+    global mic_cache_directory_path
+    mic_cache_directory_path = os.path.join(temporary_directory_path, "mic")
+    if not os.path.isdir(mic_cache_directory_path):
+        os.makedirs(mic_cache_directory_path)
+        logging.debug("Created directory for mic's cache "
+                      "{0}".format(mic_cache_directory_path))
 
 
 def combine(parameters):
