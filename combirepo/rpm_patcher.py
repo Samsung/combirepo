@@ -18,7 +18,6 @@ from kickstart_parser import KickstartFile
 import repository_combiner
 
 
-developer_outdir_original_default = "/var/tmp/combirepo/preliminary-image"
 developer_outdir_original = None
 developer_original_image = None
 developer_qemu_path = None
@@ -593,6 +592,9 @@ class RpmPatcher():
         original_images_dir = None
         global developer_original_image
         global developer_outdir_original
+        if developer_outdir_original is None:
+            path = temporaries.create_temporary_directory("preliminary-image")
+            developer_outdir_original = path
         self.images_directory = developer_outdir_original
         if not os.path.isdir(developer_outdir_original):
             os.makedirs(developer_outdir_original)

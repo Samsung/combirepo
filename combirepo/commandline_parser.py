@@ -201,7 +201,6 @@ class CommandlineParser():
         self._parser.add_argument(
             "--outdir-preliminary-image", type=str, action="store",
             dest="outdir_original",
-            default=rpm_patcher.developer_outdir_original_default,
             help="\\fBDEBUG\\fR Output directory for MIC (during the "
             "preliminary repository building)")
         self._parser.add_argument(
@@ -369,9 +368,6 @@ class CommandlineParser():
 
         # Process developer options related with RPM patcher:
         rpm_patcher.developer_outdir_original = arguments.outdir_original
-        default = rpm_patcher.developer_outdir_original_default
-        if arguments.outdir_original == default:
-            atexit.register(files.safe_rmtree, arguments.outdir_original)
         rpm_patcher.developer_original_image = arguments.original_image
         rpm_patcher.developer_qemu_path = arguments.qemu_path
         if arguments.disable_rpm_patching:
