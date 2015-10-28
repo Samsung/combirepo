@@ -613,10 +613,9 @@ class RpmPatcher():
             kickstart_file.comment_all_groups()
             logging.debug("Repositories: {0}".format(self.repositories))
             packages = prepare_minimal_packages_list(graphs)
-            repository_combiner.create_image(self.architecture, self.names,
-                                             self.repositories,
-                                             path, original_images_dir,
-                                             [], packages)
+            repository_combiner.create_image(
+                self.architecture, self.names, self.repositories, path,
+                ["--outdir", original_images_dir], packages)
         else:
             if os.path.isdir(developer_original_image):
                 original_images_dir = developer_original_image

@@ -9,6 +9,7 @@ import re
 from sets import Set
 import subprocess
 import urlparse
+import configparser
 import hidden_subprocess
 import multiprocessing
 import base64
@@ -32,7 +33,7 @@ repodata_regeneration_enabled = False
 target_arhcitecture = None
 jobs_number = 1
 repository_cache_directory_path = None
-mic_cache_directory_path = None
+mic_config_path = None
 
 
 def build_forward_dependencies(graph, package):
@@ -276,7 +277,7 @@ def construct_combined_repository(graph, marked_graph, marked_packages,
 
 
 def create_image(arch, repository_names, repository_paths, kickstart_file_path,
-                 output_directory_path, mic_options, specific_packages):
+                 mic_options, specific_packages):
     """
     Creates an image using MIC tool, from given repository and given kickstart
     file. It creates a copy of kickstart file and replaces "repo" to given
@@ -286,7 +287,6 @@ def create_image(arch, repository_names, repository_paths, kickstart_file_path,
     @param repository_names         The names of repositorues
     @param repository_paths         The repository paths
     @param kickstart_file           The kickstart file to be used
-    @param output_directory_path    The path to the output directory
     @param mic_options              Additional options for MIC.
     @param specific_packages        Packages that must be additionally
                                     installed.
@@ -301,19 +301,11 @@ def create_image(arch, repository_names, repository_paths, kickstart_file_path,
                                             repository_paths)
     kickstart_file.add_packages(specific_packages)
 
-    package_manager = None
-    if rpm_patcher.developer_disable_patching:
-        package_manager = "yum"
-    else:
-        package_manager = "zypp"
-
     # Now create the image using the "mic" tool:
-    global mic_cache_directory_path
+    global mic_config_path
     mic_command = ["sudo", "mic", "create", "loop",
-                   modified_kickstart_file_path, "-A", arch, "-o",
-                   output_directory_path, "--tmpfs",
-                   "--pkgmgr={0}".format(package_manager),
-                   "--cachedir={0}".format(mic_cache_directory_path)]
+                   modified_kickstart_file_path, "-A", arch, "--config",
+                   mic_config_path, "--tmpfs"]
     if logging.getLogger().getEffectiveLevel() <= logging.DEBUG:
         mic_options.extend(["--debug", "--verbose"])
     if mic_options is not None:
@@ -810,10 +802,70 @@ def resolve_groups(repositories, kickstart_file_path):
     return packages_all
 
 
-def initialize_cache_directories(temporary_directory_path):
+def generate_mic_config(output_directory_path, temporary_directory_path):
+    """
+    Generates mic config with changed locations of cachedir, tmpdir, rootdir.
+
+    @param output_directory_path    The path to the mic output directory.
+    @param temporary_directory_path The path to cache directory root.
+    """
+    mic_directory_path = os.path.join(temporary_directory_path, "mic")
+    mic_cache_directory_path = os.path.join(mic_directory_path, "cache")
+    mic_bootstrap_directory_path = os.path.join(mic_directory_path,
+                                                "bootstrap")
+    if not os.path.isdir(mic_directory_path):
+        os.makedirs(mic_directory_path)
+        logging.debug("Created directory for mic's cache "
+                      "{0}".format(mic_directory_path))
+    parser = configparser.SafeConfigParser()
+    mic_config_path = temporaries.create_temporary_file(".mic.conf")
+    mic_config_path_default = "/etc/mic/mic.conf"
+    # FIXME: Maybe it will be better to always generate config from scratch?
+    if not os.path.isfile(mic_config_path_default):
+        logging.warning("Cannot find {0}".format(mic_config_path_default))
+        parser.add_section("common")
+        parser.set("common", "distro_name", "Tizen")
+        # FIXME: Is it corect to hardcode paths in a such way?
+        parser.set("common", "plugin_dir", "/usr/lib/mic/plugins")
+        parser.add_section("create")
+        parser.set("create", "runtime", "bootstrap")
+        # FIXME: Do we need some abstraction here?
+        parser.set("bootstrap", "packages", "mic-bootstrap-x86-arm")
+    else:
+        shutil.copy(mic_config_path_default, mic_config_path)
+        parser.read(mic_config_path)
+        for section in ["create", "bootstrap"]:
+            if not parser.has_section(section):
+                logging.warning("Config {0} does not has section "
+                                "\"{1}\"!".format(mic_config_path_default,
+                                                  section))
+                parser.add_section(section)
+    parser.set("create", "tmpdir", mic_directory_path)
+    parser.set("create", "cachedir", mic_cache_directory_path)
+    parser.set("create", "outdir", output_directory_path)
+    package_manager = None
+    if rpm_patcher.developer_disable_patching:
+        package_manager = "yum"
+    else:
+        package_manager = "zypp"
+    parser.set("create", "pkgmgr", package_manager)
+    parser.set("bootstrap", "rootdir", mic_bootstrap_directory_path)
+
+    with open(mic_config_path, "wb") as mic_config:
+        parser.write(mic_config)
+    with open(mic_config_path, "r") as mic_config:
+        logging.debug("Using following mic config file:")
+        for line in mic_config:
+            logging.debug(line)
+    return mic_config_path
+
+
+def initialize_cache_directories(output_directory_path,
+                                 temporary_directory_path):
     """
     Initializes cache directories specified by user or set by default.
 
+    @param output_directory_path    The path to the mic output directory.
     @param temporary_directory_path The path to cache directory root.
     """
     if temporary_directory_path is None:
@@ -841,12 +893,9 @@ def initialize_cache_directories(temporary_directory_path):
         os.makedirs(repository_cache_directory_path)
         logging.debug("Created directory for repositories "
                       "{0}".format(repository_cache_directory_path))
-    global mic_cache_directory_path
-    mic_cache_directory_path = os.path.join(temporary_directory_path, "mic")
-    if not os.path.isdir(mic_cache_directory_path):
-        os.makedirs(mic_cache_directory_path)
-        logging.debug("Created directory for mic's cache "
-                      "{0}".format(mic_cache_directory_path))
+    global mic_config_path
+    mic_config_path = generate_mic_config(output_directory_path,
+                                          temporary_directory_path)
 
 
 def combine(parameters):
@@ -855,7 +904,8 @@ def combine(parameters):
 
     @param parameters   The parameters of combirepo run.
     """
-    initialize_cache_directories(parameters.temporary_directory_path)
+    initialize_cache_directories(parameters.output_directory_path,
+                                 parameters.temporary_directory_path)
 
     global target_arhcitecture
     target_arhcitecture = parameters.architecture
@@ -889,7 +939,6 @@ def combine(parameters):
     parameters.kickstart_file_path = ks_modified_path
     create_image(parameters.architecture, names, combined_repositories,
                  parameters.kickstart_file_path,
-                 parameters.output_directory_path,
                  mic_options,
                  parameters.package_names["service"])
     hidden_subprocess.visible_mode = False
