@@ -214,7 +214,7 @@ class RepositoryCombinerParameters(object):
 
     @mic_options.setter
     def mic_options(self, value):
-        if value is not list:
+        if not isinstance(value, list):
             raise Exception("Argument is not a list!")
         self._mic_options = value
 
