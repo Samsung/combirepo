@@ -34,6 +34,7 @@ target_arhcitecture = None
 jobs_number = 1
 repository_cache_directory_path = None
 mic_config_path = None
+libasan_preloading = True
 
 
 def build_forward_dependencies(graph, package):
@@ -898,6 +899,40 @@ def initialize_cache_directories(output_directory_path,
                                           temporary_directory_path)
 
 
+def prepend_preload_library(library_name, output_directory_path):
+    """
+    Prepends library
+    """
+    library_paths = files.find_fast(output_directory_path,
+                                    "{0}.so.*".format(library_name))
+    library_paths_real = []
+    library_path_real = None
+    for library_path in library_paths:
+        if not os.path.islink(library_path):
+            library_paths_real.append(library_path)
+    if len(library_paths_real) > 1:
+        logging.warning("Found several libraries {0}".format(library_name))
+        for library_path in library_paths_real:
+            logging.warning(" * {0}".format(library_path))
+    elif len(library_paths_real) < 1:
+        logging.error("Found no libraries {0}".format(library_name))
+        sys.exit("Error.")
+    library_path_real = library_paths_real[0]
+    library_basename = os.path.basename(library_path_real)
+
+    root = temporaries.mount_firmware(output_directory_path)
+    ld_preload_path = os.path.join(root, "etc/ld.so.preload")
+    lines = ["{0}\n".format(library_basename)]
+    if os.path.isfile(ld_preload_path):
+        with open(ld_preload_path, "r") as ld_preload:
+            for line in ld_preload:
+                if not line.startswith(library_name):
+                    lines.append(line)
+    with open(ld_preload_path, "w") as ld_preload:
+        for line in lines:
+            ld_preload.write(line)
+
+
 def combine(parameters):
     """
     Combines the repostories based on parameters structure.
@@ -942,3 +977,6 @@ def combine(parameters):
                  mic_options,
                  parameters.package_names["service"])
     hidden_subprocess.visible_mode = False
+
+    if "libasan" in parameters.package_names["service"] and libasan_preloading:
+        prepend_preload_library("libasan", parameters.output_directory_path)

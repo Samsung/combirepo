@@ -229,6 +229,10 @@ class CommandlineParser():
             "combirepo to use yum as a package manager inside the image, "
             "so this option will cause fail if yum does not present in "
             "the image.")
+        self._parser.add_argument(
+            "--disable-libasan-preloading", action="store_true", default=False,
+            dest="disable_libasan_preloading", help="Disable adding "
+            "libasan.so.x to /etc/ld.preload at the final stage of build.")
 
     def __prepare_parser(self):
         """
@@ -374,6 +378,8 @@ class CommandlineParser():
             rpm_patcher.developer_disable_patching = True
             atexit.register(logging.warning, "Be careful, RPM patching was "
                             "disabled!")
+        if arguments.disable_libasan_preloading:
+            repository_combiner.libasan_preloading = False
 
         if_regenerate = arguments.regenerate_repodata
         repository_combiner.repodata_regeneration_enabled = if_regenerate

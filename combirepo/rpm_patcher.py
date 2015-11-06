@@ -174,49 +174,6 @@ class RpmPatcher():
         self._package_names = {}
         self._graphs = graphs
 
-    def __find_platform_images(self):
-        """
-        Finds the platform images in the directory.
-
-        @return                     The path to the selected images.
-        """
-        logging.debug("Searching in directory "
-                      "{0}".format(self.images_directory))
-        if not os.path.isdir(self.images_directory):
-            raise Exception("{0} is not a "
-                            "directory!".format(self.images_directory))
-        images = files.find_fast(self.images_directory, ".*\.img$")
-
-        return images
-
-    def __mount_images_triplet(self, images, directory):
-        """
-        Mounts the images (rootfs + system-data + user) to the given
-        directory.
-
-        @param images       The list of paths to images.
-        @param directory    The mount directory.
-        """
-        for image in images:
-            if os.path.basename(image) == "rootfs.img":
-                rootfs_image = image
-            elif os.path.basename(image) == "system-data.img":
-                system_image = image
-            elif os.path.basename(image) == "user.img":
-                user_image = image
-            else:
-                raise Exception("Unknown image name!")
-
-        temporaries.mount_image(directory, rootfs_image)
-        system_directory = os.path.join(os.path.join(directory, "opt"))
-        if not os.path.isdir(system_directory):
-            os.mkdir(system_directory)
-        temporaries.mount_image(system_directory, system_image)
-        user_directory = os.path.join(system_directory, "usr")
-        if not os.path.isdir(user_directory):
-            os.mkdir(user_directory)
-        temporaries.mount_image(user_directory, user_image)
-
     def __produce_architecture_synonyms_list(self, architecture):
         """
         Produces the list of architecture names that are synonyms or
@@ -374,23 +331,7 @@ class RpmPatcher():
             return
         graphs = self._graphs
         self.__prepare_image(graphs)
-        images = self.__find_platform_images()
-        if len(images) == 0:
-            logging.error("No images were found.")
-            sys.exit("Error.")
-        self.patching_root = temporaries.create_temporary_directory("root")
-
-        # For all-in-one images:
-        if len(images) == 1:
-            image = images[0]
-            temporaries.mount_image(self.patching_root, image)
-        # For 3-parts images:
-        elif len(images) == 3:
-            self.__mount_images_triplet(images, self.patching_root)
-        else:
-            raise Exception("This script is able to handle only all-in-one or "
-                            "three-parted images!")
-
+        self.patching_root = temporaries.mount_firmware(self.images_directory)
         host_arch = platform.machine()
         host_arches = self.__produce_architecture_synonyms_list(host_arch)
         if self.architecture not in host_arches:
@@ -598,8 +539,8 @@ class RpmPatcher():
         self.images_directory = developer_outdir_original
         if not os.path.isdir(developer_outdir_original):
             os.makedirs(developer_outdir_original)
-        if (self.__find_platform_images() is not None and
-                len(self.__find_platform_images()) > 0):
+        images = files.find_fast(self.images_directory, ".*\.img$")
+        if (images is not None and len(images) > 0):
             return
 
         if developer_original_image is None:
