@@ -15,6 +15,7 @@ import config_parser
 from repository_pair import RepositoryPair
 import repository_combiner
 import files
+import repository_manager
 
 man_format_remove = re.compile(r'(\\f\w)|(\n\.[A-Z]{2}\n?)')
 
@@ -192,6 +193,10 @@ class CommandlineParser():
         self._parser.add_argument(
             "--password", action="store", type=str, dest="password",
             help="The password at the download server.")
+        self._parser.add_argument(
+            "--update-repository", action="append", type=str,
+            dest="update_repositories", help="The repository URL that "
+            "should be updated. Use word \"all\" to update all repositories")
 
     def __register_developer_options(self):
         """
@@ -366,6 +371,9 @@ class CommandlineParser():
             parameters.user = arguments.user
         if arguments.password is not None:
             parameters.password = arguments.password
+        if arguments.update_repositories is not None:
+            url = arguments.update_repositories
+            repository_manager.update_repositories = url
 
         if arguments.cachedir is not None:
             parameters.temporary_directory_path = arguments.cachedir

@@ -1,6 +1,7 @@
 #!/usr/bin/env python2.7
 # -*- coding: utf-8 -*-
 import os
+import shutil
 import tempfile
 import logging
 import re
@@ -10,6 +11,9 @@ from urllib2 import urlopen
 import files
 import check
 from directory_downloader import download_directory
+
+
+update_repositories = None
 
 
 class RepositoryManager():
@@ -55,7 +59,15 @@ class RepositoryManager():
             repository["url"] = url
             repository["path"] = os.path.dirname(config_path)
             repository["status"] = status
-            self._repositories.append(repository)
+            global update_repositories
+            if (update_repositories is not None and
+                    (url in update_repositories or
+                        "all" in update_repositories)):
+                shutil.rmtree(os.path.dirname(config_path))
+                logging.info("Repository for URL {0} will be "
+                             "updated!".format(url))
+            else:
+                self._repositories.append(repository)
 
         for repository in self._repositories:
             logging.debug("Found repository: {0}".format(repository))
