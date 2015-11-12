@@ -513,7 +513,7 @@ class RpmPatcher():
                 self._generate_makefile(self.patching_root_clones[i], tasks)
 
             hidden_subprocess.function_call_monitor(
-                self.__patch_packages, self._status_callback)
+                self.__patch_packages, (), self._status_callback)
             results = self._get_results()
             copy_tasks = []
             for info in results:

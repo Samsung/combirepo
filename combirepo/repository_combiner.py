@@ -529,9 +529,7 @@ def construct_combined_repositories(parameters, packages):
 
     graphs = {}
     for repository_pair in parameters.repository_pairs:
-        graphs[repository_pair.name] = hidden_subprocess.function_call(
-            "Building dependency graph for repository "
-            "{0}".format(repository_pair.name), build_graphs,
+        graphs[repository_pair.name] = build_graphs(
             repository_pair, dependency_builder, parameters)
     specified_packages = check_package_names(graphs, parameters.package_names)
 

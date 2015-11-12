@@ -11,6 +11,7 @@ from sets import Set
 import igraph
 import temporaries
 import check
+import hidden_subprocess
 
 
 class DependencyGraph(igraph.Graph):
@@ -323,6 +324,24 @@ def _search_dependencies(yum_sack, package, providers, preferables, strategy):
     return dependencies.keys(), provided_symbols, unprovided_symbols
 
 
+package_name_last_processed = None
+packages_number_done = 0
+packages_number_total = 0
+
+
+def dependency_graph_building_status():
+    """
+    Reports the status of dependency graph building process.
+
+    @return     The status tuple.
+    """
+    global package_name_last_processed
+    global packages_number_done
+    global packages_number_total
+    return ("Edge building  ", package_name_last_processed,
+            packages_number_done, packages_number_total)
+
+
 class DependencyGraphBuilder():
     """
     The builder of package dependency tree. Uses YUM as the repository
@@ -501,48 +520,61 @@ class DependencyGraphBuilder():
         else:
             return location
 
-    def __build_dependency_graph(self, yum_base):
+    def __build_vertex(self, package, names, full_names, locations,
+                       versions, releases, requirements, packages, yum_sack,
+                       graph, back_graph):
         """
-        Builds the dependency graph of the repository.
+        Builds the vertex of dependency graph that corresponds to the given
+        package.
 
-        @return The hash map with dependencies for each package.
+        @param package          The package.
+        @param names            The list of package names.
+        @param full_names       The list of package full names.
+        @param locations        The list of package locations.
+        @param versions         The list of package versions.
+        @param releases         The list of package releases.
+        @param requirements     The list of package requirements.
+        @param packages         The list of package objects.
+        @param yum_sack         The YUM sack.
+        @param graph            The forward dependency graph.
+        @param back_graph       The backward dependency graph.
         """
-        graph = DependencyGraph()
-        back_graph = DependencyGraph()
-
-        providers = {}
-        empty_list = []
-        yum_sack = yum_base.pkgSack
-
-        # Remember IDs of packages in the hash.
-        id_packages = {}
-        i = 0
-        packages = yum_sack.returnPackages()
-        graph.add_vertices(len(packages))
-        back_graph.add_vertices(len(packages))
-        names = []
-        full_names = []
-        locations = []
-        versions = []
-        releases = []
-        requirements = []
-        for package in packages:
-            full_name = _get_full_package_name(package)
-            logging.debug("Processing package {0} with full name "
-                          "{1}".format(package, full_name))
-            if self.name_checking_function is not None:
-                logging.debug("Check with name function...")
-                if not self.name_checking_function(full_name):
-                    continue
+        full_name = _get_full_package_name(package)
+        logging.debug("Processing package {0} with full name "
+                      "{1}".format(package, full_name))
+        if self.name_checking_function is not None:
+            logging.debug("Check with name function...")
+            if not self.name_checking_function(full_name):
+                return
+        location = self.__find_package_location(package)
+        # We should not include "dontuse" rpms to index at all, so delete
+        # it from there:
+        if "dontuse.rpm" in location:
+            yum_sack.delPackage(package)
+            return
+        if package.name in names:
+            name_id = graph.get_name_id(package.name)
+            added_package = packages[name_id]
+            if self.strategy is not None:
+                extreme_package = _get_extreme_package(
+                    [package, added_package], self.strategy)
+                if extreme_package == added_package:
+                    logging.debug("Already in lists.")
+                    yum_sack.delPackage(package)
+                else:
+                    yum_sack.delPackage(added_package)
+                    full_names[name_id] = full_name
+                    locations[name_id] = location
+                    versions[name_id] = package.version
+                    releases[name_id] = package.release
+                    packages[name_id] = package
+                    logging.debug("Replaced with proper package.")
+        else:
+            i = len(names)
             graph.set_name_id(package.name, i)
             back_graph.set_name_id(package.name, i)
             names.append(package.name)
             full_names.append(full_name)
-            location = self.__find_package_location(package)
-            # We should not include "dontuse" rpms to index at all, so delete
-            # it from there:
-            if "dontuse.rpm" in location:
-                yum_sack.delPackage(package)
             locations.append(location)
             versions.append(package.version)
             releases.append(package.release)
@@ -551,7 +583,47 @@ class DependencyGraphBuilder():
             for requirement in package.requires:
                 logging.debug(" * {0}".format(requirement))
             requirements.append(package.requires)
-            i = i + 1
+            packages.append(package)
+
+    def __build_dependency_graph_vertices(self, yum_base):
+        """
+        Builds vertices of repository dependency graph.
+
+        @param yum_base     The YUM base.
+        @return             Forward and backward dependency graphs
+                            (with vertices only).
+        """
+        graph = DependencyGraph()
+        back_graph = DependencyGraph()
+
+        yum_sack = yum_base.pkgSack
+
+        # Remember IDs of packages in the hash.
+        id_packages = {}
+        i = 0
+        packages = yum_sack.returnPackages()
+        graph.add_vertices(len(packages))
+        back_graph.add_vertices(len(packages))
+        tasks = []
+        names = []
+        full_names = []
+        locations = []
+        versions = []
+        releases = []
+        requirements = []
+        added_packages = []
+        for package in packages:
+            task = (package.name, package, names, full_names, locations,
+                    versions, releases, requirements, added_packages, yum_sack,
+                    graph, back_graph)
+            tasks.append(task)
+        hidden_subprocess.function_call_list(
+            "Vertex building", self.__build_vertex, tasks)
+        for i in range(len(names)):
+            name_id = graph.get_name_id(names[i])
+            if i != name_id:
+                raise Exception("name id = {0} for package #{1}".format(
+                    name_id, i))
         graph.vs["name"] = names
         graph.vs["full_name"] = full_names
         graph.vs["location"] = locations
@@ -564,9 +636,21 @@ class DependencyGraphBuilder():
         back_graph.vs["version"] = versions
         back_graph.vs["release"] = releases
         back_graph.vs["requirements"] = requirements
+        return graph, back_graph
 
+    def __build_dependency_graph_edges(self, yum_base, graph, back_graph):
+        """
+        Builds the edges of dependency graphs.
+
+        @param yum_base         The YUM base.
+        @param graph            The forward dependency graph.
+        @param back_graph       The backward dependency graph.
+        @return                 Forward and backward edges.
+        """
+        providers = {}
         edges = []
         back_edges = []
+        yum_sack = yum_base.pkgSack
         if self.packages is None or len(self.packages) == 0:
             self.packages = yum_sack.returnPackages()
         packages_scope = Set(self.packages)
@@ -605,8 +689,13 @@ class DependencyGraphBuilder():
                     if (dependency not in packages_scope and
                             dependency not in packages_processed):
                         packages_scope = packages_scope | Set([dependency])
+                        global packages_number_total
+                        packages_number_total = len(packages_scope)
                 packages_processed = packages_processed | Set([package.name])
-
+                global package_name_last_processed
+                package_name_last_processed = package.name
+                global packages_number_done
+                packages_number_done = len(packages_processed)
         graph.add_edges(edges)
         back_graph.add_edges(back_edges)
         providers = {}
@@ -617,4 +706,16 @@ class DependencyGraphBuilder():
                 providers[file_name] = package.name
         graph.symbol_providers = providers
         back_graph.symbol_providers = providers
+
+    def __build_dependency_graph(self, yum_base):
+        """
+        Builds the dependency graph of the repository.
+
+        @param yum_base         The YUM base.
+        @return                 Forward and backward dependency graphs.
+        """
+        graph, back_graph = self.__build_dependency_graph_vertices(yum_base)
+        hidden_subprocess.function_call_monitor(
+            self.__build_dependency_graph_edges, (yum_base, graph, back_graph),
+            dependency_graph_building_status)
         return graph, back_graph

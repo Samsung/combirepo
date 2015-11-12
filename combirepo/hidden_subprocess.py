@@ -10,8 +10,9 @@ import logging
 import time
 import temporaries
 
-
+"""In visible mode output from process is printed to stdout and stderr."""
 visible_mode = False
+"""The latency of status update checking progress bar re-printing."""
 latency = 0.3
 
 
@@ -31,7 +32,9 @@ class RepeatingTimer(threading._Timer):
                 self.function(*self.args, **self.kwargs)
 
 
+"""The number progress symbol that should be printed."""
 counter = 1
+"""The comment for the progress bar."""
 bar_comment = ""
 
 
@@ -95,6 +98,12 @@ def call(comment, commandline):
 
 
 def silent_call(commandline):
+    """
+    Calls the command without printing any comments.
+
+    @param commandline      The command line to be called.
+    @return                 The return code of command.
+    """
     code = call("", commandline)
     return code
 
@@ -141,6 +150,13 @@ def pipe_call(comment, commandline_from, commandline_to):
 
 
 def silent_pipe_call(commandline_from, commandline_to):
+    """
+    Calls two commands redirecting the output of first command to the second
+    one and does not prints any comments.
+
+    @param commandline      The command line to be called.
+    @return                 The return code of command.
+    """
     pipe_call("", commandline_from, commandline_to)
 
 
@@ -168,6 +184,13 @@ def function_call(comment, function, *arguments):
 
 
 def silent_function_call(function, *arguments):
+    """
+    Calls the funciton with the given arguments without printing any comments.
+
+    @param function             The function.
+    @param arguments            Its arguments.
+    @return                     The return value of the called function.
+    """
     result = function_call("", function, *arguments)
     return result
 
@@ -200,6 +223,15 @@ def print_status(comment, name, n_tasks_done, n_tasks):
 
 
 def function_call_list(comment, function, tasks):
+    """
+    Calls the function for each element of the task list.
+
+    @param comment      Comment about what is being done.
+    @param function     The function to be called.
+    @param tasks        The list of tuples (name, arguments) where name will
+                        be printed in progress bar and arguments will be passed
+                        to the funciton call.
+    """
     i_task = 1
     sys.stdout.write('\n')
     for task in tasks:
@@ -210,21 +242,34 @@ def function_call_list(comment, function, tasks):
     sys.stdout.write('\n')
 
 
+"""The function that is called to get the status of the process."""
 global_status_callback = None
 
 
 def print_status_dynamic():
+    """
+    Gets the status from callback and prints it in the progress bar.
+    """
     comment, name, n_tasks_done, n_tasks = global_status_callback()
     print_status(comment, name, n_tasks_done, n_tasks)
 
 
-def function_call_monitor(function, status_callback):
+def function_call_monitor(function, arguments, status_callback):
+    """
+    Calls the function with arguments and monitors its status using the given
+    callback.
+
+    @param function         The function to be called.
+    @param arguments        Its arguments to be passed to it.
+    @param status_callback  The callback for getting the status of the
+                            process.
+    """
     sys.stdout.write('\n')
     global global_status_callback
     global_status_callback = status_callback
     timer = RepeatingTimer(latency, print_status_dynamic)
     timer.daemon = True
     timer.start()
-    function()
+    function(*arguments)
     timer.cancel()
     sys.stdout.write('\n')
