@@ -276,9 +276,17 @@ class CommandlineParser():
         else:
             logging_level = logging.INFO
 
-        if arguments.log_file_name:
+        if arguments.log_file_name and len(arguments.log_file_name) > 0:
+            log_file_name = arguments.log_file_name
+        elif not arguments.verbose:
+            log_file_name = "combirepo.{0}.log".format(os.getpid())
+        else:
+            log_file_name = None
+        if log_file_name is not None:
             logging.basicConfig(level=logging_level,
-                                filename=arguments.log_file_name)
+                                filename=log_file_name)
+            atexit.register(sys.stdout.write, "The log with additional info "
+                            "was saved to {0}".format(log_file_name))
         else:
             logging.basicConfig(level=logging_level)
 
