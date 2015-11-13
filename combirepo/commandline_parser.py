@@ -286,7 +286,7 @@ class CommandlineParser():
             logging.basicConfig(level=logging_level,
                                 filename=log_file_name)
             atexit.register(sys.stdout.write, "The log with additional info "
-                            "was saved to {0}".format(log_file_name))
+                            "was saved to {0}\n".format(log_file_name))
         else:
             logging.basicConfig(level=logging_level)
 

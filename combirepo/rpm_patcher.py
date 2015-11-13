@@ -492,6 +492,7 @@ class RpmPatcher():
             hidden_subprocess.function_call_list(
                 "Cloning", subprocess.call, clone_tasks)
             self._tasks.sort(key=lambda task: os.stat(task[1]).st_size)
+            copy_tasks = []
             for i in range(repository_combiner.jobs_number):
                 tasks = []
                 i_task = i
@@ -499,7 +500,6 @@ class RpmPatcher():
                     tasks.append(self._tasks[i_task])
                     i_task += repository_combiner.jobs_number
 
-                copy_tasks = []
                 directories = {}
                 for task in tasks:
                     package_name, package_path, target, _, _ = task
@@ -508,9 +508,9 @@ class RpmPatcher():
                     self._targets[package_name] = target
                     basename = os.path.basename(target)
                     self._package_names[basename] = package_name
-                hidden_subprocess.function_call_list(
-                    "Copying", shutil.copy, copy_tasks)
                 self._generate_makefile(self.patching_root_clones[i], tasks)
+            hidden_subprocess.function_call_list("Copying", shutil.copy,
+                                                 copy_tasks)
 
             hidden_subprocess.function_call_monitor(
                 self.__patch_packages, (), self._status_callback)

@@ -86,7 +86,6 @@ def call(comment, commandline):
             code = subprocess.call(commandline, stdout=log_file,
                                    stderr=log_file)
         timer.cancel()
-        sys.stdout.write("\n")
 
         if code != 0:
             logging.error("The subprocess failed!")
@@ -146,7 +145,6 @@ def pipe_call(comment, commandline_from, commandline_to):
         log_file.write(errors)
 
     timer.cancel()
-    sys.stdout.write("\n")
 
 
 def silent_pipe_call(commandline_from, commandline_to):
@@ -179,7 +177,6 @@ def function_call(comment, function, *arguments):
     timer.start()
     result = function(*arguments)
     timer.cancel()
-    sys.stdout.write("\n")
     return result
 
 
@@ -204,21 +201,26 @@ def print_status(comment, name, n_tasks_done, n_tasks):
     @param n_tasks_done The number of completed tasks.
     @param n_tasks      The total number of tasks
     """
+    len_comment_max = 20
     len_name_max = 30
     num_pluses_max = 25
     sys.stdout.write("\r")
     ratio = float(n_tasks_done) / float(n_tasks)
     num_pluses = int(float(ratio) * float(num_pluses_max))
     pluses = "{s:+<{n}}".format(s="", n=num_pluses)
-    progress = "[{0}/{1}]".format(n_tasks_done, n_tasks)
+    len_tasks_max = 6
+    if len(str(n_tasks)) > len_tasks_max:
+        len_tasks_max = len(str(n_tasks))
     sys.stdout.write(
-        "{comment}: {name: <{len_name}.{len_name}} "
+        "{comment: <{len_comment}.{len_comment}}: "
+        "{name: <{len_name}.{len_name}} "
         "{bar: <{len_bar}.{len_bar}} "
-        "{progress: >{len_progress}."
-        "{len_progress}}".format(comment=comment, name=name,
-                                 len_name=len_name_max, bar=pluses,
-                                 len_bar=num_pluses_max, progress=progress,
-                                 len_progress=len(progress)))
+        "[{n_tasks_done: >{len_tasks}.{len_tasks}}/"
+        "{n_tasks: <{len_tasks}.{len_tasks}}]".format(
+            comment=comment, len_comment=len_comment_max, name=name,
+            len_name=len_name_max, bar=pluses, len_bar=num_pluses_max,
+            n_tasks_done=str(n_tasks_done), n_tasks=str(n_tasks),
+            len_tasks=len_tasks_max))
     sys.stdout.flush()
 
 
@@ -233,13 +235,12 @@ def function_call_list(comment, function, tasks):
                         to the funciton call.
     """
     i_task = 1
-    sys.stdout.write('\n')
     for task in tasks:
         print_status(comment, task[0], i_task, len(tasks))
         arguments = task[1:]
         function(*arguments)
         i_task += 1
-    sys.stdout.write('\n')
+    sys.stdout.write("\n")
 
 
 """The function that is called to get the status of the process."""
@@ -264,7 +265,6 @@ def function_call_monitor(function, arguments, status_callback):
     @param status_callback  The callback for getting the status of the
                             process.
     """
-    sys.stdout.write('\n')
     global global_status_callback
     global_status_callback = status_callback
     timer = RepeatingTimer(latency, print_status_dynamic)

@@ -17,3 +17,6 @@ manifest.json
 
 # VIM temporary files:
 .*.swp
+
+# combirepo logs:
+combirepo.*.log
