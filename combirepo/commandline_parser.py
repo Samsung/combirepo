@@ -71,43 +71,48 @@ class CommandlineParser():
         """
         Register positional arguments.
         """
-        self._parser.add_argument("triplets", type=str, nargs='*',
-                                  help="Triplets: 1. Name of "
-                                  "repository as specified in kickstart file, "
-                                  "2. Path to non-marked repository, "
-                                  "3. Path to marked repository.")
+        self._parser.add_argument(
+            "triplets", type=str, nargs='*', help="R|Triplets: \n\n"
+            "triplet_1 triplet_2 ... triplet_i ... triplet_n\n\n"
+            "where each triplet has the following form:\n\n"
+            "NAME URL_ORIG URL_MARKED\n\n"
+            "where:\n"
+            "1. NAME       is the name of repository as specified in \n"
+            "              kickstart file, \n"
+            "2. URL_ORIG   is the path (if it is located locally)\n"
+            "              or the URL  (if it is located remotely)\n"
+            "              to the original repository, \n"
+            "3. URL_MARKED is the path (if it is located locally)\n"
+            "              or the URL  (if it is located remotely)\n"
+            "              to the marked repository.")
 
     def __register_package_name_options(self):
         """
         Registers options that controll package name handling.
         """
-        self._parser.add_argument("-f", "--forward", type=str, action="append",
-                                  help="The name of package that should be "
-                                  "marked with all its forward dependencies")
-        self._parser.add_argument("-b", "--backward", type=str,
-                                  action="append",
-                                  help="The name of package that should be "
-                                  "marked with all its backward dependencies "
-                                  "(i. e. dependees)")
-        self._parser.add_argument("-s", "--single", type=str, action="append",
-                                  help="The name of package that should be "
-                                  "marked")
-        self._parser.add_argument("-e", "--exclude", type=str, action="append",
-                                  help="The name of package that should be "
-                                  "excluded from the final list of marked "
-                                  "packages.")
-        self._parser.add_argument("-S", "--service", type=str,
-                                  action="append", help="The name of "
-                                  "package that are not installed to the "
-                                  "image by default, but that must be "
-                                  "installed in this build. The sample is "
-                                  "\\fBlibasan\\fR package used for builds "
-                                  "with Address Sanitizer support.")
-        self._parser.add_argument("-p", "--preferable-packages",
-                                  action="append", type=str, dest="preferable",
-                                  help="The name of package that should "
-                                  "be prefered in case of \"have choice\" "
-                                  "problem.")
+        self._parser.add_argument(
+            "-f", "--forward", type=str, action="append", help="The name of "
+            "package that should be marked with all its forward dependencies")
+        self._parser.add_argument(
+            "-b", "--backward", type=str, action="append", help="The name of "
+            "package that should be marked with all its backward dependencies "
+            "(i. e. dependees)")
+        self._parser.add_argument(
+            "-s", "--single", type=str, action="append", help="The name of "
+            "package that should be marked")
+        self._parser.add_argument(
+            "-e", "--exclude", type=str, action="append", help="The name of "
+            "package that should be excluded from the final list of marked "
+            "packages.")
+        self._parser.add_argument(
+            "-S", "--service", type=str, action="append", help="The name of "
+            "package that are not installed to the mage by default, but that "
+            "must be installed in this build. The sample is \\fBlibasan\\fR "
+            "package used for builds with Address Sanitizer support.")
+        self._parser.add_argument(
+            "-p", "--preferable-packages", action="append", type=str,
+            dest="preferable", help="The name of package that should be "
+            "prefered in case of \"have choice\" problem.")
 
     def __register_program_run_options(self):
         """
@@ -123,15 +128,15 @@ class CommandlineParser():
             default=False, help="R|Enable debug mode (temporaries "
             "will be saved)\n"
             "\\fBUSE WITH CAUTION\\fR: produces lots of files")
-        self._parser.add_argument("-l", "--logfile", type=str, action="store",
-                                  dest="log_file_name", help="Log all output "
-                                  "to the given file.")
-        self._parser.add_argument("-c", "--config", type=str, action="store",
-                                  dest="config", help="Use the custom config "
-                                  "file instead of default one.")
-        self._parser.add_argument("-j", "--jobs", type=int, action="store",
-                                  dest="jobs_number", help="Number of "
-                                  "parallel jobs", default=1)
+        self._parser.add_argument(
+            "-l", "--logfile", type=str, action="store", dest="log_file_name",
+            help="Log all output to the given file.")
+        self._parser.add_argument(
+            "-c", "--config", type=str, action="store", dest="config",
+            help="Use the custom config file instead of default one.")
+        self._parser.add_argument(
+            "-j", "--jobs", type=int, action="store", dest="jobs_number",
+            help="Number of parallel jobs", default=1)
 
     def __register_mic_related_options(self):
         """
