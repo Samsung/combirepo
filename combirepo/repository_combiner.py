@@ -895,6 +895,13 @@ def initialize_cache_directories(output_directory_path,
     global mic_config_path
     mic_config_path = generate_mic_config(output_directory_path,
                                           temporary_directory_path)
+    patching_cache_path = os.path.join(temporary_directory_path,
+                                       "patching_cache")
+    if not os.path.isdir(patching_cache_path):
+        os.makedirs(patching_cache_path)
+        logging.debug("Created directory for patching cache "
+                      "{0}".format(patching_cache_path))
+    rpm_patcher.patching_cache_path = patching_cache_path
 
 
 def prepend_preload_library(library_name, output_directory_path):

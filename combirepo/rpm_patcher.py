@@ -18,10 +18,38 @@ from kickstart_parser import KickstartFile
 import repository_combiner
 
 
+"""
+The directory where the preliminary image should be saved. If the user sets
+this direcotry manually (i. e. via command line option) then the image is not
+deleted at the exit from program.
+"""
 developer_outdir_original = None
+
+
+"""
+The path to ready preliminary image (i. e. already built) that user provided
+via command line option.
+"""
 developer_original_image = None
+
+
+"""
+The path to the qemu package/binary that user provided via command line or
+config file option.
+"""
 developer_qemu_path = None
+
+
+"""Whether to disable RPM patching at all."""
 developer_disable_patching = False
+
+
+"""The path to directory with patched RPMs. """
+patching_cache_path = None
+
+
+"""Whether the patching cache should be dropped. """
+drop_patching_cache = False
 
 
 def prepare_minimal_packages_list(graphs):
@@ -137,6 +165,11 @@ def create_patched_packages(queue):
     os.chroot(root)
     logging.debug("Chrooting to {0} done.".format(root))
     os.chdir("/")
+    if not os.path.isfile("/Makefile"):
+        logging.info("Chroot has no jobs to perform.")
+        queue.task_done()
+        return
+
     make_command = ["make"]
     if not hidden_subprocess.visible_mode:
         make_command.append("--silent")
@@ -445,6 +478,8 @@ class RpmPatcher():
         results = []
         for root in self.patching_root_clones:
             results_path = os.path.join(root, "rpmrebuild_results")
+            if not os.path.isdir(results_path):
+                continue
             paths = files.find_fast(results_path, ".*\.rpm")
             for path in paths:
                 name = self._package_names[os.path.basename(path)]
@@ -464,64 +499,171 @@ class RpmPatcher():
             last_name, _, _, _, _ = self._tasks[0]
         return "Patching", last_name, len(results), len(self._tasks)
 
+    def __do_idle_tasks(self):
+        """
+        Does idle tasks, i. e. just copies RPMs in case when RPM patching is
+        totally disabled.
+        """
+        tasks = []
+        for task in self._tasks:
+            package_name, package_path, target, _, _ = task
+            check.file_exists(package_path)
+            tasks.append((package_name, package_path, target))
+        hidden_subprocess.function_call_list(
+            "Copying w/o patching", shutil.copy, tasks)
+
+    def __preprocess_cache(self):
+        """
+        Preprocesses the patching RPMs cache.
+        """
+        global drop_patching_cache
+        if drop_patching_cache:
+            global patching_cache_path
+            shutil.rmtree(patching_cache_path)
+            os.makedirs(patching_cache_path)
+            return
+
+        ready_rpms = files.find_fast(patching_cache_path, ".*\.rpm")
+        info_items = {}
+        for rpm in ready_rpms:
+            info_path = "{0}.info.txt".format(rpm)
+            if os.path.isfile(info_path):
+                with open(info_path, "r") as info_file:
+                    lines = []
+                    for line in info_file:
+                        lines.append(line)
+                    info_item = lines[0]
+                    info_items[info_item] = rpm
+        for info_item in info_items.keys():
+            logging.info("Found item {0} at location "
+                         "{1}".format(info_item, info_items[info_item]))
+
+        copy_tasks = []
+        tasks_undone = []
+        for i_task in range(len(self._tasks)):
+            task = self._tasks[i_task]
+            name, path, destination, release, updates = task
+            info = "{0}".format((name, path, release, updates))
+            logging.info("Searching for {0}".format(info))
+            if_cached = False
+            for key in info_items.keys():
+                if key.startswith(info) or info.startswith(key[:20]):
+                    cached_package_path = info_items[key]
+                    logging.info("Found already patched RPM at "
+                                 "{0}".format(cached_package_path))
+                    copy_tasks.append((name, cached_package_path,
+                                       destination))
+                    if_cached = True
+                    break
+            if not if_cached:
+                tasks_undone.append(task)
+        self._tasks = tasks_undone
+
+        if len(copy_tasks) > 0:
+            hidden_subprocess.function_call_list(
+                "Copying from cache", shutil.copy, copy_tasks)
+
+    def __clone_chroots(self):
+        """
+        Clones patching chroot to several clones.
+        """
+        clone_tasks = []
+        for i in range(repository_combiner.jobs_number):
+            clone_path = temporaries.create_temporary_directory(
+                "patching_root_clone.{0}".format(i))
+            shutil.rmtree(clone_path)
+            self.patching_root_clones.append(clone_path)
+            clone_tasks.append(
+                ("chroot #{0}".format(i),
+                 ["cp", "-a", self.patching_root, clone_path]))
+        hidden_subprocess.function_call_list(
+            "Cloning chroot", subprocess.call, clone_tasks)
+
+    def __deploy_packages(self):
+        """
+        Deploys packages to chroot clones and generates makefiles for them.
+        """
+        self._tasks.sort(key=lambda task: os.stat(task[1]).st_size)
+        copy_tasks = []
+        for i in range(repository_combiner.jobs_number):
+            tasks = []
+            i_task = i
+            while i_task < len(self._tasks):
+                tasks.append(self._tasks[i_task])
+                i_task += repository_combiner.jobs_number
+
+            if len(tasks) == 0:
+                continue
+
+            directories = {}
+            for task in tasks:
+                package_name, package_path, target, _, _ = task
+                copy_tasks.append((package_name, package_path,
+                                   self.patching_root_clones[i]))
+                self._targets[package_name] = target
+                basename = os.path.basename(target)
+                self._package_names[basename] = package_name
+            self._generate_makefile(self.patching_root_clones[i], tasks)
+        hidden_subprocess.function_call_list(
+            "Copying to patcher", shutil.copy, copy_tasks)
+
+    def __postprocess_cache(self):
+        """
+        Postprocesses the patching RPMs cache.
+        """
+        results = self._get_results()
+        copy_tasks = []
+        for result in results:
+            name, path, _ = result
+            global patching_cache_path
+            destination_path = os.path.join(
+                patching_cache_path, os.path.basename(path))
+            matching_task = None
+            for task in self._tasks:
+                if task[0] == name:
+                    name, path, _, release, updates = task
+                    matching_task = (name, path, release, updates)
+            if matching_task is None:
+                raise Exception("Cannot match task for {0}".format(name))
+            info_path = "{0}.info.txt".format(destination_path)
+            info = "{0}".format(matching_task)
+            with open(info_path, "wb") as info_file:
+                info_file.write(info)
+            copy_tasks.append((name, path, destination_path))
+        hidden_subprocess.function_call_list(
+            "Copying to cache", shutil.copy, copy_tasks)
+
+    def __process_results(self):
+        """
+        Processes final results of patcher.
+        """
+        results = self._get_results()
+        copy_tasks = []
+        for info in results:
+            name, path, _ = info
+            target = self._targets[name]
+            copy_tasks.append((name, path, target))
+        hidden_subprocess.function_call_list(
+            "Copying to repo", shutil.copy, copy_tasks)
+
     def do_tasks(self):
         """
         Creates copies of added packages in the given directories and adjusts
         their release numbers to the given values.
         """
-        self.__prepare()
         global developer_disable_patching
         if developer_disable_patching:
-            tasks = []
-            for task in self._tasks:
-                package_name, package_path, target, _, _ = task
-                check.file_exists(package_path)
-                tasks.append((package_name, package_path, target))
-            hidden_subprocess.function_call_list(
-                "Copying", shutil.copy, tasks)
+            self.__do_idle_tasks()
         else:
-            clone_tasks = []
-            for i in range(repository_combiner.jobs_number):
-                clone_path = temporaries.create_temporary_directory(
-                    "patching_root_clone.{0}".format(i))
-                shutil.rmtree(clone_path)
-                self.patching_root_clones.append(clone_path)
-                clone_tasks.append(
-                    ("chroot #{0}".format(i),
-                     ["cp", "-a", self.patching_root, clone_path]))
-            hidden_subprocess.function_call_list(
-                "Cloning", subprocess.call, clone_tasks)
-            self._tasks.sort(key=lambda task: os.stat(task[1]).st_size)
-            copy_tasks = []
-            for i in range(repository_combiner.jobs_number):
-                tasks = []
-                i_task = i
-                while i_task < len(self._tasks):
-                    tasks.append(self._tasks[i_task])
-                    i_task += repository_combiner.jobs_number
-
-                directories = {}
-                for task in tasks:
-                    package_name, package_path, target, _, _ = task
-                    copy_tasks.append((package_name, package_path,
-                                       self.patching_root_clones[i]))
-                    self._targets[package_name] = target
-                    basename = os.path.basename(target)
-                    self._package_names[basename] = package_name
-                self._generate_makefile(self.patching_root_clones[i], tasks)
-            hidden_subprocess.function_call_list("Copying", shutil.copy,
-                                                 copy_tasks)
-
-            hidden_subprocess.function_call_monitor(
-                self.__patch_packages, (), self._status_callback)
-            results = self._get_results()
-            copy_tasks = []
-            for info in results:
-                name, path, _ = info
-                target = self._targets[name]
-                copy_tasks.append((name, path, target))
-            hidden_subprocess.function_call_list(
-                "Copying", shutil.copy, copy_tasks)
+            self.__preprocess_cache()
+            if len(self._tasks) > 0:
+                self.__prepare()
+                self.__clone_chroots()
+                self.__deploy_packages()
+                hidden_subprocess.function_call_monitor(
+                    self.__patch_packages, (), self._status_callback)
+                self.__postprocess_cache()
+                self.__process_results()
 
     def __prepare_image(self, graphs):
         """

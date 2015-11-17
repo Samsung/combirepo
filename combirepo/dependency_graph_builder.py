@@ -338,7 +338,7 @@ def dependency_graph_building_status():
     global package_name_last_processed
     global packages_number_done
     global packages_number_total
-    return ("Edge building", package_name_last_processed,
+    return ("Building edges", package_name_last_processed,
             packages_number_done, packages_number_total)
 
 
@@ -618,7 +618,7 @@ class DependencyGraphBuilder():
                     graph, back_graph)
             tasks.append(task)
         hidden_subprocess.function_call_list(
-            "Vertex building", self.__build_vertex, tasks)
+            "Building vertices", self.__build_vertex, tasks)
         for i in range(len(names)):
             name_id = graph.get_name_id(names[i])
             if i != name_id:

@@ -240,6 +240,10 @@ class CommandlineParser():
             "so this option will cause fail if yum does not present in "
             "the image.")
         self._parser.add_argument(
+            "--drop-patching-cache", action="store_true", default=False,
+            dest="drop_patching_cache", help="Drop the cache with patched "
+            "RPMs.")
+        self._parser.add_argument(
             "--disable-libasan-preloading", action="store_true", default=False,
             dest="disable_libasan_preloading", help="Disable adding "
             "libasan.so.x to /etc/ld.preload at the final stage of build.")
@@ -399,6 +403,7 @@ class CommandlineParser():
             rpm_patcher.developer_disable_patching = True
             atexit.register(logging.warning, "Be careful, RPM patching was "
                             "disabled!")
+        rpm_patcher.drop_patching_cache = arguments.drop_patching_cache
         if arguments.disable_libasan_preloading:
             repository_combiner.libasan_preloading = False
 
