@@ -36,6 +36,8 @@ class RepeatingTimer(threading._Timer):
 counter = 1
 """The comment for the progress bar."""
 bar_comment = ""
+"""The default comment to be printed if something is done."""
+default_bar_comment = "Processing, please wait"
 
 
 def progress_bar_print():
@@ -45,12 +47,25 @@ def progress_bar_print():
     progress_symbols = ['|', '/', '—', '\\']
     sys.stdout.write("\r")
     global counter
-    progress_symbol = progress_symbols[counter % len(progress_symbols)]
+    if counter == 0:
+        progress_symbol = '+'
+    else:
+        progress_symbol = progress_symbols[counter % len(progress_symbols)]
     progress = "[ " + progress_symbol + " ]"
-    progress_bar = bar_comment + " " + progress
+    if bar_comment == "":
+        comment = default_bar_comment
+    else:
+        comment = bar_comment
+    progress_bar = comment + " " + progress
     sys.stdout.write(progress_bar)
     sys.stdout.flush()
     counter = counter + 1
+
+
+def progress_bar_print_final():
+    global counter
+    counter = 0
+    progress_bar_print()
 
 
 def call(comment, commandline):
@@ -93,6 +108,8 @@ def call(comment, commandline):
             with open(log_file_name, 'r') as log_file:
                 logging.error("{0}".format(log_file.read()))
 
+    progress_bar_print_final()
+    sys.stdout.write('\n')
     return code
 
 
@@ -145,6 +162,8 @@ def pipe_call(comment, commandline_from, commandline_to):
         log_file.write(errors)
 
     timer.cancel()
+    progress_bar_print_final()
+    sys.stdout.write('\n')
 
 
 def silent_pipe_call(commandline_from, commandline_to):
@@ -177,6 +196,8 @@ def function_call(comment, function, *arguments):
     timer.start()
     result = function(*arguments)
     timer.cancel()
+    progress_bar_print_final()
+    sys.stdout.write('\n')
     return result
 
 
