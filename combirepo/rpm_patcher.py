@@ -547,7 +547,7 @@ class RpmPatcher():
             logging.info("Searching for {0}".format(info))
             if_cached = False
             for key in info_items.keys():
-                if key.startswith(info) or info.startswith(key[:20]):
+                if key == info:
                     cached_package_path = info_items[key]
                     logging.info("Found already patched RPM at "
                                  "{0}".format(cached_package_path))
@@ -621,8 +621,8 @@ class RpmPatcher():
             matching_task = None
             for task in self._tasks:
                 if task[0] == name:
-                    name, path, _, release, updates = task
-                    matching_task = (name, path, release, updates)
+                    name, marked_rpm_path, _, release, updates = task
+                    matching_task = (name, marked_rpm_path, release, updates)
             if matching_task is None:
                 raise Exception("Cannot match task for {0}".format(name))
             info_path = "{0}.info.txt".format(destination_path)
@@ -646,6 +646,46 @@ class RpmPatcher():
         hidden_subprocess.function_call_list(
             "Copying to repo", shutil.copy, copy_tasks)
 
+    def __use_cached_root_or_prepare(self):
+        """
+        Tries to find cached root and uses it in case it exists and prepares
+        it otherwise.
+        """
+        image_info = "{0}".format((self.names, self.repositories,
+                                   self.architecture,
+                                   os.path.basename(self.kickstart_file_path)))
+        cached_images_info_paths = files.find_fast(
+            patching_cache_path, ".*preliminary_image.info.txt")
+        matching_images_path = None
+        for info_path in cached_images_info_paths:
+            cached_images_path = info_path.replace(".info.txt", "")
+            if not os.path.isdir(cached_images_path):
+                logging.error("Directory {0} not "
+                              "found!".format(cached_images_path))
+                continue
+            lines = []
+            with open(info_path, "r") as info_file:
+                for line in info_file:
+                    lines.append(line)
+            if lines[0] == image_info:
+                matching_images_path = cached_images_path
+                break
+        if matching_images_path is not None:
+            self.patching_root = matching_images_path
+            logging.info("Found already prepared patching root: "
+                         "{0}".format(matching_images_path))
+        else:
+            self.__prepare()
+            cached_chroot_path = os.path.join(
+                patching_cache_path, os.path.basename(
+                    self.patching_root) + "preliminary_image")
+            hidden_subprocess.call(
+                "Saving chroot to cache",
+                ["cp", "-a", self.patching_root, cached_chroot_path])
+            info_path = cached_chroot_path + ".info.txt"
+            with open(info_path, "wb") as info_file:
+                info_file.write(image_info)
+
     def do_tasks(self):
         """
         Creates copies of added packages in the given directories and adjusts
@@ -657,7 +697,7 @@ class RpmPatcher():
         else:
             self.__preprocess_cache()
             if len(self._tasks) > 0:
-                self.__prepare()
+                self.__use_cached_root_or_prepare()
                 self.__clone_chroots()
                 self.__deploy_packages()
                 hidden_subprocess.function_call_monitor(
