@@ -186,6 +186,7 @@ def function_call(comment, function, *arguments):
     @param arguments            Its arguments.
     @return                     The return value of the called function.
     """
+    time_start = time.time()
     global counter
     counter = 1
     global bar_comment
@@ -198,6 +199,9 @@ def function_call(comment, function, *arguments):
     timer.cancel()
     progress_bar_print_final()
     sys.stdout.write('\n')
+    time_elapsed = time.time() - time_start
+    logging.info("Function {0} with comment \"{1}\" has taken "
+                 "{2}".format(function.__name__, comment, time_elapsed))
     return result
 
 

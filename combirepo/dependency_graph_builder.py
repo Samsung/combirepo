@@ -651,6 +651,7 @@ class DependencyGraphBuilder():
         edges = []
         back_edges = []
         yum_sack = yum_base.pkgSack
+        packages_scope_initial = self.packages
         if self.packages is None or len(self.packages) == 0:
             self.packages = yum_sack.returnPackages()
         packages_scope = Set(self.packages)
@@ -706,6 +707,65 @@ class DependencyGraphBuilder():
                 providers[file_name] = package.name
         graph.symbol_providers = providers
         back_graph.symbol_providers = providers
+        sys.stdout.write("\n")
+        hidden_subprocess.function_call(
+            "Inspecting file conflicts",
+            self.__check_file_conflicts, yum_sack.returnPackages(),
+            packages_scope_initial)
+
+    def __check_file_conflicts(self, packages, packages_scope):
+        """
+        Checks file conflicts between packages.
+
+        @param packages         The list of packages.
+        @param packages_scope   The installed packages.
+        """
+        providers = {}
+        providers_conflicts = {}
+        for package in packages:
+            symbols = package.filelist
+            for symbol in symbols:
+                provider = providers.get(symbol)
+                if (provider is not None and
+                        provider != package.name and
+                        package.name in packages_scope):
+                    if providers_conflicts.get(symbol) is None:
+                        providers_conflicts[symbol] = []
+                        providers_conflicts[symbol].append(providers[symbol])
+                        providers_conflicts[symbol].append(package.name)
+                    else:
+                        providers_conflicts[symbol].append(package.name)
+                providers[symbol] = package.name
+        conflicts = {}
+        for symbol in providers_conflicts.keys():
+            conflict = tuple(sorted(providers_conflicts[symbol]))
+            if conflict in conflicts.keys():
+                conflicts[conflict].append(symbol)
+            else:
+                conflicts[conflict] = [symbol]
+
+        scope_conflicts = {}
+        for conflict in conflicts.keys():
+            logging.warning(
+                "Packages {0} have {1} "
+                "conflicts:".format(", ".join(conflict),
+                                    len(conflicts[conflict])))
+            for symbol in conflicts[conflict]:
+                logging.warning(" * {0}".format(symbol))
+            degree = 0
+            if packages_scope is not None:
+                for name in conflict:
+                    if name in packages_scope:
+                        degree += 1
+            if degree > 1:
+                scope_conflicts[conflict] = conflicts[conflict]
+        if len(scope_conflicts) > 0:
+            for conflict in scope_conflicts:
+                logging.error("Conflict between {0} is "
+                              "critical.".format(", ".join(conflict)))
+            # FIXME: Here the script must fail, but it was disabled due to the
+            # fact that Tizen 2.4 images can be built with MIC even when some
+            # such conflicts exist.
 
     def __build_dependency_graph(self, yum_base):
         """
