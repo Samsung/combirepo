@@ -13,6 +13,7 @@ import hidden_subprocess
 
 
 common_authenticator = None
+sizes = {}
 
 
 def resolve_link(link, url):
@@ -118,7 +119,6 @@ def inspect_directory(url, target, check_url):
             logging.debug("Exception happened: (errno {0}) "
                           "{1}".format(error.errno, error.strerror))
             time.sleep(0.1)
-            logging.debug
         else:
             break
     if response.info().type == 'text/html':
@@ -152,6 +152,8 @@ def inspect_directory(url, target, check_url):
     else:
         if not os.path.isfile(target):
             open(target, 'a').close()
+            global sizes
+            sizes[target] = response.info().getheaders("Content-Length")[0]
 
 
 def download_file(file_url, file_path):
@@ -165,13 +167,28 @@ def download_file(file_url, file_path):
     if (os.path.isfile(file_path) and
             os.path.getsize(file_path) > 0):
         return
-    buffer_size = 4096
-    with open(file_path, 'wb') as file_target:
-        response = urlopen(file_url)
-        chunk = response.read(buffer_size)
-        while chunk:
-            file_target.write(chunk)
+    num_attempts = 0
+    while True:
+        buffer_size = 4096
+        with open(file_path, 'wb') as file_target:
+            response = urlopen(file_url)
             chunk = response.read(buffer_size)
+            while chunk:
+                file_target.write(chunk)
+                chunk = response.read(buffer_size)
+        size = os.stat(file_path).st_size
+        global sizes
+        if sizes.get(file_path) is None:
+            raise Exception("File {0} is not correct.".format(file_path))
+        if int(size) == int(sizes[file_path]):
+            break
+        else:
+            logging.error("File has size {0} while it must be "
+                          "{1}".format(size, sizes[file_path]))
+            logging.error("Attempt #{0} to download remote file {1} failed, "
+                          "retrying...".format(num_attempts, file_url))
+            num_attempts += 1
+            time.sleep(1)
 
 
 def download_directory(url, target, check_url, authenticator):
