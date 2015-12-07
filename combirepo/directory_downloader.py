@@ -14,6 +14,7 @@ import hidden_subprocess
 
 common_authenticator = None
 sizes = {}
+names = []
 
 
 def resolve_link(link, url):
@@ -79,6 +80,7 @@ def urlopen(url):
     @param url  The URL.
     @return     Opened URL.
     """
+    logging.debug("\nOpening {0}\n".format(url))
     response = None
     global common_authenticator
     if common_authenticator is not None:
@@ -88,6 +90,7 @@ def urlopen(url):
         response = urllib2.urlopen(request)
     else:
         response = urllib2.urlopen(url)
+    logging.debug("\nOpening {0} -> done\n".format(url))
     return response
 
 
@@ -101,6 +104,10 @@ def inspect_directory(url, target, check_url):
     @param check_url    The function that checks whether the file with given
                         URL should be downloaded.
     """
+    global names
+    global sizes
+    logging.debug("=======Downloading {0} to {1}\n".format(url, target))
+
     def mkdir():
         if not mkdir.done:
             try:
@@ -109,8 +116,6 @@ def inspect_directory(url, target, check_url):
                 pass
             mkdir.done = True
     mkdir.done = False
-
-    logging.debug("Downloading {0} to {1}".format(url, target))
 
     while True:
         try:
@@ -122,9 +127,17 @@ def inspect_directory(url, target, check_url):
         else:
             break
     if response.info().type == 'text/html':
+        if target in sizes.keys():
+            del sizes[target]
+        name = os.path.basename(target)
+        if name in names:
+            names.remove(os.path.basename(target))
+
         contents = response.read()
         parser = LinkListingHTMLParser(url)
         parser.feed(contents)
+        links_resolved = []
+        logging.debug("Links:\n")
         for link in parser.links:
             link = resolve_link(link, url)
             if link[-1] == '/':
@@ -136,31 +149,40 @@ def inspect_directory(url, target, check_url):
             name = link.rsplit('/', 1)[1]
             if '?' in name:
                 continue
+            links_resolved.append(link)
+            names.append(name)
+            logging.debug(" * {0}\n".format(link))
+        for link in links_resolved:
             mkdir()
+            name = link.rsplit('/', 1)[1]
             inspect_directory(link, os.path.join(target, name), check_url)
             if not mkdir.done:
                 # We didn't find anything to write inside this directory
                 # Maybe it's a HTML file?
+                if os.path.isdir(target):
+                    continue
                 if url[-1] != '/':
                     end = target[-5:].lower()
                     if not (end.endswith('.htm') or end.endswith('.html')):
                         target = target + '.html'
                     if not (os.path.isfile(target) and
                             os.path.getsize(target) > 0):
+                        logging.debug("Simple download {0}\n".format(target))
                         with open(target, 'wb') as file_target:
                             file_target.write(contents)
     else:
         if not os.path.isfile(target):
-            open(target, 'a').close()
-            global sizes
             sizes[target] = response.info().getheaders("Content-Length")[0]
+            logging.debug(
+                "Setting size of {0} to {1}\n".format(target, sizes[target]))
+            download_file(response, target)
 
 
-def download_file(file_url, file_path):
+def download_file(response, file_path):
     """
     Downloads the given file URL to the given file path.
 
-    @param file_url     The URL.
+    @param response     The urlopen response of file opening.
     @param file_path    The path.
     """
     # Do not repeat the download if file already presents.
@@ -171,7 +193,6 @@ def download_file(file_url, file_path):
     while True:
         buffer_size = 4096
         with open(file_path, 'wb') as file_target:
-            response = urlopen(file_url)
             chunk = response.read(buffer_size)
             while chunk:
                 file_target.write(chunk)
@@ -191,6 +212,50 @@ def download_file(file_url, file_path):
             time.sleep(1)
 
 
+def download_status_callback():
+    """
+    Gets the status of downloading process.
+    """
+    paths = []
+    global sizes
+    global names
+    logging.debug("Length of sizes is {0}.\n".format(len(sizes)))
+    name_current = None
+    for path in sizes.keys():
+        logging.debug(
+            "Analyzing {0} that must have size "
+            "{1}.\n".format(path, sizes[path]))
+        name = os.path.basename(path)
+        if os.path.isfile(path):
+            size_actual = os.stat(path).st_size
+            if (int(sizes[path]) > 0 and
+                    int(size_actual) == int(sizes[path]) and
+                    name in names):
+                paths.append(path)
+                logging.debug("   collected!\n")
+            else:
+                logging.debug(
+                    "   Size of {0} is {1} while must be "
+                    "{2}.\n".format(path, size_actual, sizes[path]))
+                name_current = name
+        else:
+            logging.debug("   not a file.\n")
+    logging.debug("--- Found {0} collected ---\n".format(len(paths)))
+    if len(paths) > 0:
+        paths.sort(key=lambda path: os.path.getmtime(path))
+        name_last = os.path.basename(paths[-1])
+    else:
+        name_last = "unknown"
+    if len(names) > 0:
+        num_tasks = len(names)
+    else:
+        num_tasks = 1
+    num_tasks_done = len(paths)
+    if name_current is None:
+        name_current = name_last
+    return ("Downloading", name_current, num_tasks_done, num_tasks)
+
+
 def download_directory(url, target, check_url, authenticator):
     """
     Inspects the given remote directory to the local directory with the
@@ -207,14 +272,9 @@ def download_directory(url, target, check_url, authenticator):
         url = url + "/"
     global common_authenticator
     common_authenticator = authenticator
-    hidden_subprocess.function_call("Inspecting remote directory "
-                                    "{0}".format(url), inspect_directory, url,
-                                    target, check_url)
-
-    file_paths = files.find_fast(target, ".*")
-    tasks = []
-    for file_path in file_paths:
-        file_url = url + os.path.relpath(file_path, target)
-        file_name = os.path.basename(file_path)
-        tasks.append((file_name, file_url, file_path))
-    hidden_subprocess.function_call_list("Downloading", download_file, tasks)
+    global sizes
+    sizes = {}
+    global names
+    name = []
+    hidden_subprocess.function_call_monitor(
+        inspect_directory, (url, target, check_url), download_status_callback)

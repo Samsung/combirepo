@@ -297,4 +297,5 @@ def function_call_monitor(function, arguments, status_callback):
     timer.start()
     function(*arguments)
     timer.cancel()
+    print_status_dynamic()
     sys.stdout.write('\n')
