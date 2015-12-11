@@ -275,6 +275,6 @@ def download_directory(url, target, check_url, authenticator):
     global sizes
     sizes = {}
     global names
-    name = []
+    names = []
     hidden_subprocess.function_call_monitor(
         inspect_directory, (url, target, check_url), download_status_callback)
