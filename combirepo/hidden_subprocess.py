@@ -31,6 +31,9 @@ class RepeatingTimer(threading._Timer):
             else:
                 self.function(*self.args, **self.kwargs)
 
+    def stop(self):
+        self.function(*self.args, **self.kwargs)
+
 
 """The number progress symbol that should be printed."""
 counter = 1
@@ -57,6 +60,9 @@ def progress_bar_print():
     else:
         comment = bar_comment
     progress_bar = comment + " " + progress
+    sys.stdout.write(' ' * 100)
+    sys.stdout.write("\r")
+    sys.stdout.flush()
     sys.stdout.write(progress_bar)
     sys.stdout.flush()
     counter = counter + 1
@@ -186,6 +192,7 @@ def function_call(comment, function, *arguments):
     @param arguments            Its arguments.
     @return                     The return value of the called function.
     """
+    sys.stdout.write('\n')
     time_start = time.time()
     global counter
     counter = 1
@@ -297,5 +304,4 @@ def function_call_monitor(function, arguments, status_callback):
     timer.start()
     function(*arguments)
     timer.cancel()
-    print_status_dynamic()
     sys.stdout.write('\n')

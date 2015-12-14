@@ -707,7 +707,6 @@ class DependencyGraphBuilder():
                 providers[file_name] = package.name
         graph.symbol_providers = providers
         back_graph.symbol_providers = providers
-        sys.stdout.write("\n")
         hidden_subprocess.function_call(
             "Inspecting file conflicts",
             self.__check_file_conflicts, yum_sack.returnPackages(),
