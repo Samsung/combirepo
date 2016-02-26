@@ -204,7 +204,6 @@ class RepositoryCombinerParameters(object):
 
     @kickstart_file_path.setter
     def kickstart_file_path(self, value):
-        check.file_exists(value)
         self._kickstart_file_path = value
 
     @kickstart_file_path.deleter

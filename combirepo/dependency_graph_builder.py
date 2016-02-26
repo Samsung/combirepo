@@ -277,6 +277,7 @@ def _handle_have_choice_problem(requirement, providers, preferables, strategy):
         else:
             logging.error("You should specify one and only one SHORT name "
                           "as argument.")
+        logging.debug("Preferables: {0}".format(preferables))
         sys.exit("\"Have choice\" error!")
     return provider
 
@@ -385,6 +386,9 @@ class DependencyGraphBuilder():
         self.strategy = None
         self.name_checking_function = package_name_checking_function
         self.packages = packages
+        if self.packages is None or len(self.packages) == 0:
+            logging.error("No package scope for the given repository has been "
+                          "specified!")
         self.preferables.extend(self.packages)
         logging.debug("Initializing dependency graph builder...")
 
@@ -665,18 +669,21 @@ class DependencyGraphBuilder():
         @param back_graph       The backward dependency graph.
         @return                 Forward and backward edges.
         """
+        logging.debug("Begin building edges...")
         providers = {}
         edges = []
         back_edges = []
         yum_sack = yum_base.pkgSack
         packages_scope_initial = self.packages
-        if self.packages is None or len(self.packages) == 0:
-            self.packages = yum_sack.returnPackages()
-        packages_scope = Set(self.packages)
         package_names = [package.name for package in yum_sack.returnPackages()]
-        for package in packages_scope:
-            if package not in package_names:
-                packages_scope = packages_scope - Set([package])
+        if self.packages is None or len(self.packages) == 0:
+            self.packages = package_names
+            logging.error("No package scope for the given repository has been "
+                          "specified!")
+        packages_scope = Set(self.packages)
+        for package_name in packages_scope:
+            if package_name not in package_names:
+                packages_scope = packages_scope - Set([package_name])
         packages_processed = Set([])
         while len(packages_processed) < len(packages_scope):
             logging.debug("Processed {0} packages from "

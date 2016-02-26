@@ -481,6 +481,8 @@ def check_repository_names(names, kickstart_file_path):
                           "by user.".format(name, kickstart_file_path))
             logging.error("Possible names are: {0}".format(possible_names))
             if_error = True
+    if if_error:
+        sys.exit("Error.")
 
 
 def check_package_names(graphs, package_names):
@@ -772,6 +774,7 @@ def prepare_repositories(parameters):
     if kickstart_file_path is None or not os.path.isfile(kickstart_file_path):
         kickstart_file_path = get_kickstart_from_repos(repository_pairs,
                                                        kickstart_file_path)
+        check.file_exists(kickstart_file_path)
         check_repository_names(names, kickstart_file_path)
     logging.info("The following kickstart file will be used: "
                  "{0}".format(kickstart_file_path))
