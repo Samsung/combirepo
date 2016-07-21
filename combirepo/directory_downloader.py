@@ -138,9 +138,20 @@ def inspect_directory(url, target, check_url):
     while True:
         try:
             response = urlopen(url)
+        except urllib2.HTTPError as error:
+            if error.code == 403:
+                logging.info("HTTP error 403 Forbidden for URL: "
+                             "{0}".format(url))
+                logging.debug("names: {0}".format(names))
+                removed_name = url.rsplit('/', 1)[1]
+                logging.debug("removed_name = {0}".format(removed_name))
+                if removed_name in names:
+                    names.remove(removed_name)
+                return
         except urllib2.URLError as error:
             logging.debug("Exception happened: (errno {0}) "
-                          "{1}".format(error.errno, error.strerror))
+                          "{1} while trying url {2}".format(
+                              error.errno, error, url))
             time.sleep(0.1)
         else:
             break
