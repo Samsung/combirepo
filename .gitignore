@@ -20,3 +20,9 @@ manifest.json
 
 # combirepo logs:
 combirepo.*.log
+
+# Build directory:
+build
+
+# Egg info directory:
+combirepo.egg-info
