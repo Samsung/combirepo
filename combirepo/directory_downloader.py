@@ -239,7 +239,7 @@ def download_file(response, file_path):
             logging.error("File has size {0} while it must be "
                           "{1}".format(size, sizes[file_path]))
             logging.error("Attempt #{0} to download remote file {1} failed, "
-                          "retrying...".format(num_attempts, file_url))
+                          "retrying...".format(num_attempts, file_path))
             num_attempts += 1
             time.sleep(1)
 
