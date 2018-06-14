@@ -807,8 +807,14 @@ def resolve_groups(repositories, kickstart_file_path):
     logging.debug("Following groups files prepared:")
     for groups_path in groups_paths:
         logging.debug(" * {0}".format(groups_path))
-    parser = mic.kickstart.read_kickstart(kickstart_file_path)
-    groups = mic.kickstart.get_groups(parser)
+    try:
+        parser = mic.kickstart.read_kickstart(kickstart_file_path)
+        groups = mic.kickstart.get_groups(parser)
+    except mic.utils.errors.KsError as err:
+        logging.error("Failed to read kickstart file:")
+        logging.error(str(err))
+        sys.exit("Error.")
+
     groups_resolved = {}
     for group in groups:
         groups_resolved[group.name] = []
