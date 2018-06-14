@@ -24,15 +24,18 @@ import re
 import logging
 import urllib2
 import time
+from threading import Lock
 from urlparse import urlparse
 from HTMLParser import HTMLParser
 import files
 import hidden_subprocess
+import socket
 
 
 common_authenticator = None
 sizes = {}
 names = []
+sizes_lock = Lock()
 
 
 def resolve_link(link, url):
@@ -159,8 +162,9 @@ def inspect_directory(url, target, check_url):
         else:
             break
     if response.info().type == 'text/html':
-        if target in sizes.keys():
-            del sizes[target]
+        with sizes_lock:
+            if target in sizes.keys():
+                del sizes[target]
         name = os.path.basename(target)
         if name in names:
             names.remove(os.path.basename(target))
@@ -204,9 +208,10 @@ def inspect_directory(url, target, check_url):
                             file_target.write(contents)
     else:
         if not os.path.isfile(target):
-            sizes[target] = response.info().getheaders("Content-Length")[0]
-            logging.debug(
-                "Setting size of {0} to {1}\n".format(target, sizes[target]))
+            with sizes_lock:
+                sizes[target] = response.info().getheaders("Content-Length")[0]
+                logging.debug(
+                    "Setting size of {0} to {1}\n".format(target, sizes[target]))
             download_file(response, target)
 
 
@@ -249,26 +254,24 @@ def download_status_callback():
     Gets the status of downloading process.
     """
     paths = []
-    global sizes
+    sizes_copy = {}
+    with sizes_lock:
+        global sizes
+        sizes_copy = sizes.copy()
     global names
     logging.debug("Length of sizes is {0}.\n".format(len(sizes)))
     name_current = None
-    for path in sizes.keys():
-        logging.debug(
-            "Analyzing {0} that must have size "
-            "{1}.\n".format(path, sizes[path]))
+    for path, size in sizes_copy.iteritems():
+        logging.debug("Analyzing {0} that must have size {1}.\n".format(path, size))
         name = os.path.basename(path)
         if os.path.isfile(path):
             size_actual = os.stat(path).st_size
-            if (int(sizes[path]) > 0 and
-                    int(size_actual) == int(sizes[path]) and
-                    name in names):
+            if (int(size) > 0 and int(size_actual) == int(size) and name in names):
                 paths.append(path)
                 logging.debug("   collected!\n")
             else:
-                logging.debug(
-                    "   Size of {0} is {1} while must be "
-                    "{2}.\n".format(path, size_actual, sizes[path]))
+                logging.debug("   Size of {0} is {1} while must be {2}.\n".format(
+                    path, size_actual, size))
                 name_current = name
         else:
             logging.debug("   not a file.\n")
