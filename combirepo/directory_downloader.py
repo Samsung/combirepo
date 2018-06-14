@@ -153,6 +153,9 @@ def inspect_directory(url, target, check_url):
                           "{1} while trying url {2}".format(
                               error.errno, error, url))
             time.sleep(0.1)
+        except socket.timeout as error:
+            logging.error("Connection timed out while trying to open url: " + url)
+            sys.exit("Error.")
         else:
             break
     if response.info().type == 'text/html':
