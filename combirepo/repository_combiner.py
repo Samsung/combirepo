@@ -721,8 +721,13 @@ def get_kickstart_from_repos(repository_pairs, kickstart_substring):
                           "file or the unique substring! "
                           "({0}).".format(helper_string))
             sys.exit("Error.")
-        else:
+        elif len(matching_kickstart_file_paths) == 1:
             kickstart_file_path_resulting = matching_kickstart_file_paths[0]
+        else:
+            logging.error("No matching kickstart files found in repositories, "
+                          "please specify another path to the kickstart file! "
+                          "({0}).".format(helper_string))
+            sys.exit("Error.")
     elif len(all_kickstart_file_paths) == 1:
         kickstart_file_path_resulting = all_kickstart_file_paths[0]
     else:
