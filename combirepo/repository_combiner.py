@@ -990,7 +990,7 @@ def combine(parameters):
                                                             packages)
     mic_options = ["--shrink"]
     if parameters.mic_options is list:
-        mic_options.extend(args.mic_options)
+        mic_options.extend(parameters.mic_options)
     hidden_subprocess.visible_mode = True
 
     ks_modified_path = temporaries.create_temporary_file("mod.ks")
