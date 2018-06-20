@@ -94,7 +94,6 @@ def prepare_minimal_packages_list(graphs):
 
     packages = []
     for symbol in symbols:
-        provider = None
         if len(providers[symbol]) < 1:
             for graph in graphs:
                 for key in graph.symbol_providers.keys():
@@ -119,10 +118,7 @@ def prepare_minimal_packages_list(graphs):
                 for provider in providers[symbol]:
                     logging.warning(" * {0}".format(provider))
 
-            provider = next(iter(providers[symbol]))  # FIXME: is it correct?
-        else:
-            provider = next(iter(providers[symbol]))
-        packages.append(provider)
+        packages.append(providers[symbol].pop())
 
     logging.debug("Minimal packages list:")
     for package in packages:
@@ -364,6 +360,9 @@ class RpmPatcher():
         os.chroot(self.patching_root)
         os.chdir("/")
         os.chdir("/rpmrebuild/src")
+        # NOTE: Uncomment following line if 'make' is not executable in the built image
+        #       (only for debugging purposes)
+        # hidden_subprocess.call("Preparing 'make'", ["chmod", "+x", "/usr/bin/make"])
         hidden_subprocess.call("Making the rpmrebuild.", ["make"])
         hidden_subprocess.call("Installing the rpmrebuild.",
                                ["make", "install"])
