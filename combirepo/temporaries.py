@@ -168,10 +168,10 @@ def mount_firmware(firmware_path):
     if len(images) == 1:
         image = images[0]
         mount_image(root, image)
-    # For 3-parts images:
-    elif len(images) >= 3:
+    # For 3-parts and 6-parts images:
+    elif len(images) == 3 or len(images) == 6:
         __mount_images_triplet(images, root)
     else:
         raise Exception("This script is able to handle only all-in-one or "
-                        "three-parted images!")
+                        "three- or six-parted images!")
     return root
