@@ -3,7 +3,7 @@
 Combirepo is a tool for combining several repositories into firmware.
 
 Intended to be used together with OBS-produced repositories.
-Refer man 1 combirepo for details.
+Refer `man 1 combirepo` for details.
 
 ## Installation
 
