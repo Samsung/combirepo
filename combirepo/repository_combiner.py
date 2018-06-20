@@ -817,7 +817,11 @@ def resolve_groups(repositories, kickstart_file_path):
         sys.exit("Error.")
 
     for group in groups:
-        group_pkgs = [get_pkglist_in_comps(group.name, path) for path in groups_paths]
+        group_pkgs = [
+            pkg
+            for path in groups_paths
+            for pkg in get_pkglist_in_comps(group.name, path)
+        ]
         logging.debug("Group {0} contains {1} packages.".format(group.name, len(group_pkgs)))
         packages.update(group_pkgs)
 
