@@ -1,4 +1,4 @@
 [submodule "combirepo/rpmrebuild"]
 	path = rpmrebuild
-	url = git://git.code.sf.net/p/rpmrebuild/git
+	url = https://git.code.sf.net/p/rpmrebuild/git
 	revision = .

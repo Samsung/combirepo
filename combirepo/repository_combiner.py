@@ -721,8 +721,13 @@ def get_kickstart_from_repos(repository_pairs, kickstart_substring):
                           "file or the unique substring! "
                           "({0}).".format(helper_string))
             sys.exit("Error.")
-        else:
+        elif len(matching_kickstart_file_paths) == 1:
             kickstart_file_path_resulting = matching_kickstart_file_paths[0]
+        else:
+            logging.error("No matching kickstart files found in repositories, "
+                          "please specify another path to the kickstart file! "
+                          "({0}).".format(helper_string))
+            sys.exit("Error.")
     elif len(all_kickstart_file_paths) == 1:
         kickstart_file_path_resulting = all_kickstart_file_paths[0]
     else:
@@ -802,24 +807,25 @@ def resolve_groups(repositories, kickstart_file_path):
     logging.debug("Following groups files prepared:")
     for groups_path in groups_paths:
         logging.debug(" * {0}".format(groups_path))
-    parser = mic.kickstart.read_kickstart(kickstart_file_path)
-    groups = mic.kickstart.get_groups(parser)
-    groups_resolved = {}
-    for group in groups:
-        groups_resolved[group.name] = []
-        for groups_path in groups_paths:
-            packages = get_pkglist_in_comps(group.name, groups_path)
-            groups_resolved[group.name] = packages
-        logging.debug("Group {0} contains {1} "
-                      "packages.".format(group.name,
-                                         len(groups_resolved[group.name])))
-    packages_all = []
-    for group_name in groups_resolved.keys():
-        packages_all.extend(groups_resolved[group_name])
-    if len(groups_resolved) != len(groups):
-        logging.error("Not all groups were resolved.")
+    try:
+        parser = mic.kickstart.read_kickstart(kickstart_file_path)
+        groups = mic.kickstart.get_groups(parser)
+        packages = set(mic.kickstart.get_packages(parser))
+    except mic.utils.errors.KsError as err:
+        logging.error("Failed to read kickstart file:")
+        logging.error(str(err))
         sys.exit("Error.")
-    return packages_all
+
+    for group in groups:
+        group_pkgs = [
+            pkg
+            for path in groups_paths
+            for pkg in get_pkglist_in_comps(group.name, path)
+        ]
+        logging.debug("Group {0} contains {1} packages.".format(group.name, len(group_pkgs)))
+        packages.update(group_pkgs)
+
+    return list(packages)
 
 
 def generate_mic_config(output_directory_path, temporary_directory_path):
@@ -988,7 +994,7 @@ def combine(parameters):
                                                             packages)
     mic_options = ["--shrink"]
     if parameters.mic_options is list:
-        mic_options.extend(args.mic_options)
+        mic_options.extend(parameters.mic_options)
     hidden_subprocess.visible_mode = True
 
     ks_modified_path = temporaries.create_temporary_file("mod.ks")

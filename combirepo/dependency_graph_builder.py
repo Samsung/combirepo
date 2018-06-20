@@ -357,6 +357,7 @@ def dependency_graph_building_status():
     global package_name_last_processed
     global packages_number_done
     global packages_number_total
+    # TODO: Fix race condition
     return ("Building edges", package_name_last_processed,
             packages_number_done, packages_number_total)
 

@@ -31,7 +31,7 @@ def main(args=None):
     config_parser = ConfigParser()
     if os.path.isfile(config_parser.path):
         config_parameters = config_parser.parse()
-        parameters = config_parameters + commandline_parameters
+        parameters = commandline_parameters + config_parameters
     else:
         parameters = commandline_parameters
     repository_combiner.combine(parameters)
