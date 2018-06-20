@@ -51,20 +51,18 @@ class CustomInstallCommand(install):
     def run(self):
         install.run(self)
 
-        instcmd = self.get_finalized_command('install')
-        root = instcmd.root
         prefix = path.abspath(get_config_vars('prefix')[0])
         data_dir = path.abspath(check_data_dir())
         man_file = path.join(data_dir, "combirepo.1")
 
         if not path.exists(man_file):
             self.run_command('build_manpage')
-        man_path = path.abspath('{0}/{1}/share/man/man1/'.format(root, prefix))
+        man_path = path.abspath('{0}/share/man/man1/'.format(prefix))
         if not path.exists(man_path):
             makedirs(man_path)
 
         print "Installing man page into {0}".format(man_path)
-        cmd = "bash -c 'gzip {0} \
+        cmd = "bash -c 'gzip -f {0} \
                && install -m 0644 {0}.gz {1}/'".format(man_file, man_path)
         args = shlex.split(cmd)
         call(args)
