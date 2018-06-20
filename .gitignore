@@ -21,8 +21,14 @@ manifest.json
 # combirepo logs:
 combirepo.*.log
 
-# Build directory:
+# Build directories:
 build
+combirepo/data
+deb_dist
+dist
 
 # Egg info directory:
 combirepo.egg-info
+
+# Archives
+*.tar.gz
