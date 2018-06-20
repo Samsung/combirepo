@@ -810,27 +810,18 @@ def resolve_groups(repositories, kickstart_file_path):
     try:
         parser = mic.kickstart.read_kickstart(kickstart_file_path)
         groups = mic.kickstart.get_groups(parser)
+        packages = set(mic.kickstart.get_packages(parser))
     except mic.utils.errors.KsError as err:
         logging.error("Failed to read kickstart file:")
         logging.error(str(err))
         sys.exit("Error.")
 
-    groups_resolved = {}
     for group in groups:
-        groups_resolved[group.name] = []
-        for groups_path in groups_paths:
-            packages = get_pkglist_in_comps(group.name, groups_path)
-            groups_resolved[group.name] = packages
-        logging.debug("Group {0} contains {1} "
-                      "packages.".format(group.name,
-                                         len(groups_resolved[group.name])))
-    packages_all = []
-    for group_name in groups_resolved.keys():
-        packages_all.extend(groups_resolved[group_name])
-    if len(groups_resolved) != len(groups):
-        logging.error("Not all groups were resolved.")
-        sys.exit("Error.")
-    return packages_all
+        group_pkgs = [get_pkglist_in_comps(group.name, path) for path in groups_paths]
+        logging.debug("Group {0} contains {1} packages.".format(group.name, len(group_pkgs)))
+        packages.update(group_pkgs)
+
+    return list(packages)
 
 
 def generate_mic_config(output_directory_path, temporary_directory_path):
