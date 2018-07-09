@@ -312,7 +312,12 @@ class CommandlineParser():
         else:
             logging.basicConfig(level=logging_level)
 
-        config_parser.initialize_config(arguments.config)
+        if len(arguments.triplets) == 0:
+            gen_init_config = True
+        else:
+            gen_init_config = False
+
+        config_parser.initialize_config(arguments.config, gen_init_config)
         repository_combiner.jobs_number = arguments.jobs_number
 
     def __build_repository_pairs(self, arguments):

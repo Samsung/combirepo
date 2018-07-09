@@ -33,7 +33,7 @@ from repository_pair import RepositoryPair
 default_path = "~/.combirepo.conf"
 
 
-def initialize_config(config_file_path):
+def initialize_config(config_file_path, gen_init_config):
     """
     Checks the given config and initializes it if it is not set and does not
     exist.
@@ -45,7 +45,7 @@ def initialize_config(config_file_path):
     global default_path
     if config_file_path is None:
         config_file_path = os.path.expanduser(default_path)
-        if not os.path.isfile(config_file_path):
+        if not os.path.isfile(config_file_path) and gen_init_config:
             logging.warning("Default config {0} does not exist! It will "
                             "be generated, but you should complete it with "
                             "repository paths, package names and other "
