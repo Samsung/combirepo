@@ -24,15 +24,18 @@ import re
 import logging
 import urllib2
 import time
+from threading import Lock
 from urlparse import urlparse
 from HTMLParser import HTMLParser
 import files
 import hidden_subprocess
+import socket
 
 
 common_authenticator = None
 sizes = {}
 names = []
+sizes_lock = Lock()
 
 
 def resolve_link(link, url):
@@ -105,9 +108,9 @@ def urlopen(url):
         request = urllib2.Request(url)
         request.add_header("Authorization",
                            "Basic {0}".format(common_authenticator))
-        response = urllib2.urlopen(request)
+        response = urllib2.urlopen(request, timeout=30)
     else:
-        response = urllib2.urlopen(url)
+        response = urllib2.urlopen(url, timeout=30)
     logging.debug("\nOpening {0} -> done\n".format(url))
     return response
 
@@ -153,11 +156,15 @@ def inspect_directory(url, target, check_url):
                           "{1} while trying url {2}".format(
                               error.errno, error, url))
             time.sleep(0.1)
+        except socket.timeout as error:
+            logging.error("Connection timed out while trying to open url: " + url)
+            sys.exit("Error.")
         else:
             break
     if response.info().type == 'text/html':
-        if target in sizes.keys():
-            del sizes[target]
+        with sizes_lock:
+            if target in sizes.keys():
+                del sizes[target]
         name = os.path.basename(target)
         if name in names:
             names.remove(os.path.basename(target))
@@ -201,9 +208,10 @@ def inspect_directory(url, target, check_url):
                             file_target.write(contents)
     else:
         if not os.path.isfile(target):
-            sizes[target] = response.info().getheaders("Content-Length")[0]
-            logging.debug(
-                "Setting size of {0} to {1}\n".format(target, sizes[target]))
+            with sizes_lock:
+                sizes[target] = response.info().getheaders("Content-Length")[0]
+                logging.debug(
+                    "Setting size of {0} to {1}\n".format(target, sizes[target]))
             download_file(response, target)
 
 
@@ -236,7 +244,7 @@ def download_file(response, file_path):
             logging.error("File has size {0} while it must be "
                           "{1}".format(size, sizes[file_path]))
             logging.error("Attempt #{0} to download remote file {1} failed, "
-                          "retrying...".format(num_attempts, file_url))
+                          "retrying...".format(num_attempts, file_path))
             num_attempts += 1
             time.sleep(1)
 
@@ -246,26 +254,24 @@ def download_status_callback():
     Gets the status of downloading process.
     """
     paths = []
-    global sizes
+    sizes_copy = {}
+    with sizes_lock:
+        global sizes
+        sizes_copy = sizes.copy()
     global names
     logging.debug("Length of sizes is {0}.\n".format(len(sizes)))
     name_current = None
-    for path in sizes.keys():
-        logging.debug(
-            "Analyzing {0} that must have size "
-            "{1}.\n".format(path, sizes[path]))
+    for path, size in sizes_copy.iteritems():
+        logging.debug("Analyzing {0} that must have size {1}.\n".format(path, size))
         name = os.path.basename(path)
         if os.path.isfile(path):
             size_actual = os.stat(path).st_size
-            if (int(sizes[path]) > 0 and
-                    int(size_actual) == int(sizes[path]) and
-                    name in names):
+            if (int(size) > 0 and int(size_actual) == int(size) and name in names):
                 paths.append(path)
                 logging.debug("   collected!\n")
             else:
-                logging.debug(
-                    "   Size of {0} is {1} while must be "
-                    "{2}.\n".format(path, size_actual, sizes[path]))
+                logging.debug("   Size of {0} is {1} while must be {2}.\n".format(
+                    path, size_actual, size))
                 name_current = name
         else:
             logging.debug("   not a file.\n")

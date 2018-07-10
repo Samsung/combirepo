@@ -251,6 +251,10 @@ def print_status(comment, name, n_tasks_done, n_tasks):
     @param n_tasks_done The number of completed tasks.
     @param n_tasks      The total number of tasks
     """
+    if n_tasks < n_tasks_done:
+        raise AttributeError(
+            "Total tasks number is less than the number of done tasks: {0} < {1}".format(
+                n_tasks_done, n_tasks))
     len_comment_max = 20
     len_name_max = 30
     num_pluses_max = 25
@@ -284,12 +288,12 @@ def function_call_list(comment, function, tasks):
                         be printed in progress bar and arguments will be passed
                         to the funciton call.
     """
-    i_task = 1
-    for task in tasks:
-        print_status(comment, task[0], i_task, len(tasks))
+    tasks_copy = list(tasks)
+    tasks_num = len(tasks_copy)
+    for i_task, task in enumerate(tasks_copy, start=1):
+        print_status(comment, task[0], i_task, tasks_num)
         arguments = task[1:]
         function(*arguments)
-        i_task += 1
     sys.stdout.write("\n")
 
 
