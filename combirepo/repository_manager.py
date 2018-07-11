@@ -129,12 +129,6 @@ class RepositoryManager():
                           "be used.")
             return repository["path"]
         elif repository["status"] == "empty":
-            # Download the repository (if we are here, then it's not ready)
-            logging.debug("Downloading directory {0}".format(url))
-            download_directory(repository["url"],
-                               repository["path"],
-                               self._name_checking_function, authenticator)
-            repository["status"] = "ready"
             if repository_found is None:
                 self._repositories.append(repository)
             else:
@@ -142,6 +136,16 @@ class RepositoryManager():
             parser = configparser.SafeConfigParser()
             parser.add_section('repository')
             parser.set('repository', 'url', url)
+            parser.set('repository', 'status', 'empty')
+            with open(os.path.join(repository["path"],
+                      ".repository.conf"), 'wb') as repository_config:
+                parser.write(repository_config)
+            # Download the repository (if we are here, then it's not ready)
+            logging.debug("Downloading directory {0}".format(url))
+            download_directory(repository["url"],
+                               repository["path"],
+                               self._name_checking_function, authenticator)
+            repository["status"] = "ready"
             parser.set('repository', 'status', 'ready')
             with open(os.path.join(repository["path"],
                       ".repository.conf"), 'wb') as repository_config:

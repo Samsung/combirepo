@@ -207,12 +207,11 @@ def inspect_directory(url, target, check_url):
                         with open(target, 'wb') as file_target:
                             file_target.write(contents)
     else:
-        if not os.path.isfile(target):
-            with sizes_lock:
-                sizes[target] = response.info().getheaders("Content-Length")[0]
-                logging.debug(
-                    "Setting size of {0} to {1}\n".format(target, sizes[target]))
-            download_file(response, target)
+        with sizes_lock:
+            sizes[target] = response.info().getheaders("Content-Length")[0]
+            logging.debug(
+                "Setting size of {0} to {1}\n".format(target, sizes[target]))
+        download_file(response, target)
 
 
 def download_file(response, file_path):
