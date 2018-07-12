@@ -24,4 +24,4 @@ $ sudo dpkg -i deb_dist/combirepo_*.deb
 
 ## License
 
-The application is distributed under GPLv2 license, refer the LICENSE file.
+The application is distributed under GPLv2 license, refer the [LICENSE](LICENSE) file.
