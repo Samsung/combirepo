@@ -42,6 +42,8 @@ This guide uses specific terminology:
 
 `combirepo` acts as follows:
 
+<img align="right" width="330" height="442" src="combirepo.png">
+
 1. Download repositories.
 2. Generate (or re-generate) repository metadata in a proper way.
 3. Find kickstart files (with `*.ks` extension) inside the repositories (they are usually contained in the package image-configurations).
