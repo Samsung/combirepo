@@ -112,7 +112,7 @@ def build_package_set(graph, back_graph, package_names):
     return marked
 
 
-def check_rpm_versions(graph, marked_graph, packages):
+def check_rpm_versions(graph, marked_graph, packages, if_skip_mismatch = False):
     """
     Checks that versions of packages do not differ, otherwise reports about
     all differencies and aborts the program.
@@ -153,8 +153,9 @@ def check_rpm_versions(graph, marked_graph, packages):
             "".format(package=package, len_package=len_package_name_max,
                       version=version, version_marked=version_marked,
                       len_version=len_version_max))
-    logging.error("Please go and rebuild them!")
-    sys.exit("Error.")
+    if not if_skip_mismatch:
+        logging.error("Please go and rebuild them!")
+        sys.exit("Error.")
 
 
 def get_requirements_updates(package_name, requirements_tuples,
@@ -211,7 +212,7 @@ def get_requirements_updates(package_name, requirements_tuples,
 
 
 def construct_combined_repository(graph, marked_graph, marked_packages,
-                                  if_mirror, rpm_patcher):
+                                  if_mirror, rpm_patcher, if_skip_mismatch = False):
     """
     Constructs the temporary repository that consists of symbolic links to
     packages from non-marked and marked repositories.
@@ -225,7 +226,7 @@ def construct_combined_repository(graph, marked_graph, marked_packages,
 
     @return                 The path to the constructed combined repository.
     """
-    check_rpm_versions(graph, marked_graph, marked_packages)
+    check_rpm_versions(graph, marked_graph, marked_packages, if_skip_mismatch)
     repository_path = temporaries.create_temporary_directory("combirepo")
     packages_not_found = []
     copy_tasks = []
@@ -434,7 +435,8 @@ def process_repository_pair(repository_pair, graphs, parameters,
                                                              marked_graph,
                                                              marked_packages,
                                                              mirror_mode,
-                                                             rpm_patcher)
+                                                             rpm_patcher,
+                                                             parameters.skip_mismatch)
     return combined_repository_path, marked_packages
 
 
