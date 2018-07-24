@@ -1011,4 +1011,5 @@ def combine(parameters):
     hidden_subprocess.visible_mode = False
 
     if "libasan" in parameters.package_names["service"] and libasan_preloading:
-        prepend_preload_library("libasan", parameters.output_directory_path)
+        images_dict = kickstart_file.get_images_mount_points()
+        prepend_preload_library("libasan", parameters.output_directory_path, images_dict)

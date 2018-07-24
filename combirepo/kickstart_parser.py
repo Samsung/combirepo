@@ -48,6 +48,24 @@ class KickstartFile():
                     names.extend(re.findall(r"--name=(\S+)", line))
             return names
 
+    def get_images_mount_points(self):
+        """
+        Gets the names of images and corresponding mount points
+        that are mentioned in the kickstart file.
+        """
+        with open(self.path, "r") as kickstart_file:
+            images_dict = {}
+            for line in kickstart_file:
+                if line.startswith("part /"):
+                    image = re.findall(r"--label=(\S+)", line)
+                    mount_point = re.findall(r"/(\S*)", line)
+                    if image and mount_point:
+                        images_dict.update([(image[0] + '.img', mount_point[0])])
+                    else:
+                        logging.warning("Could not find image info in {0}".format(line))
+            logging.debug("Found theese images: {0}".format(images_dict))
+            return images_dict
+
     def replace_repository_paths(self, repository_names, repository_paths):
         """
         Replaces the paths to the repository with given names with to the given
