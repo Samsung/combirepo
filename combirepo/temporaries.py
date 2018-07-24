@@ -127,8 +127,8 @@ def __mount_images(images, directory, images_dict):
     """
     for image in images:
         img_name = os.path.basename(image)
-        mount_point = images_dict[img_name]
-        if mount_point is not None:
+        if img_name in images_dict:
+            mount_point = images_dict[img_name]
             mount_dir = os.path.join(os.path.join(directory, mount_point))
             if not os.path.isdir(mount_dir):
                 os.makedirs(mount_dir)
