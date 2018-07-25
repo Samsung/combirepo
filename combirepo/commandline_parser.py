@@ -197,6 +197,11 @@ class CommandlineParser():
             "LTO enabling for whole project, massive sanitizing, compiler "
             "options experiments.")
         self._parser.add_argument(
+            "--skip-version-mismatch", action="store_true", default=False,
+            dest="skip_mismatch", help="If true and there is version mismatch, "
+            "unmark such packages and continue build. Else go to exception in"
+            "such case.")
+        self._parser.add_argument(
             "-P", "--preferring-strategy", action="store", type=str,
             dest="preferring_strategy", help="Have choice resolving strategy "
             "for the case when there are packages with equal names "
@@ -403,6 +408,7 @@ class CommandlineParser():
 
         parameters.greedy_mode = arguments.greedy
         parameters.mirror_mode = arguments.mirror
+        parameters.skip_mismatch = arguments.skip_mismatch
         if arguments.preferring_strategy is not None:
             parameters.preferring_strategy = arguments.preferring_strategy
         if arguments.sup_repo_url is not None:
