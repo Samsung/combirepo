@@ -379,9 +379,11 @@ class RpmPatcher():
         if developer_disable_patching:
             logging.debug("RPM patcher will not be prepared.")
             return
+        kickstart_file = KickstartFile(self.kickstart_file_path)
+        images_dict = kickstart_file.get_images_mount_points()
         graphs = self._graphs
         self.__prepare_image(graphs)
-        self.patching_root = temporaries.mount_firmware(self.images_directory)
+        self.patching_root = temporaries.mount_firmware(self.images_directory, images_dict)
         host_arch = platform.machine()
         host_arches = self.__produce_architecture_synonyms_list(host_arch)
         if self.architecture not in host_arches:
