@@ -90,7 +90,7 @@ class RepositoryManager():
         for repository in self._repositories:
             logging.debug("Found repository: {0}".format(repository))
 
-    def prepare(self, url, authenticator):
+    def prepare(self, url, authenticator, packages_list = None):
         """
         Prepares the local copy of the repository that is specified at the
         given url.
@@ -144,7 +144,8 @@ class RepositoryManager():
             logging.debug("Downloading directory {0}".format(url))
             download_directory(repository["url"],
                                repository["path"],
-                               self._name_checking_function, authenticator)
+                               self._name_checking_function, authenticator,
+                               packages_list)
             repository["status"] = "ready"
             parser.set('repository', 'status', 'ready')
             with open(os.path.join(repository["path"],

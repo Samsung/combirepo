@@ -131,6 +131,10 @@ class CommandlineParser():
             "-p", "--preferable-packages", action="append", type=str,
             dest="preferable", help="The name of package that should be "
             "prefered in case of \"have choice\" problem.")
+        self._parser.add_argument(
+            "--packages-file", action="store", type=str,
+            dest="packages_file", help="The file containing list of snapshot packages "
+            "that should be downloaded from repositories.")
 
     def __register_program_run_options(self):
         """
@@ -356,6 +360,14 @@ class CommandlineParser():
             repository_pairs.append(repository_pair)
         return repository_pairs
 
+    def __parse_packages_file(self, packages_file):
+        packages_list = []
+        if packages_file is not None:
+            with open(packages_file, 'r') as pkg_file:
+                for package in pkg_file:
+                    packages_list.append(package.strip())
+        return packages_list
+
     def __build_package_names(self, arguments):
         """
         Processes parsed package-related options and builds package names from
@@ -389,6 +401,8 @@ class CommandlineParser():
         parameters.profile_name = "commandline"
         repository_pairs = self.__build_repository_pairs(arguments)
         parameters.repository_pairs = repository_pairs
+        if arguments.packages_file is not None:
+            parameters.packages_list = self.__parse_packages_file(arguments.packages_file)
 
         # Process MIC-related options:
         if arguments.architecture is not None:

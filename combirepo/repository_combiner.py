@@ -765,13 +765,16 @@ def prepare_repositories(parameters):
     authenticator = base64.encodestring("{0}:{1}".format(parameters.user,
                                                          parameters.password))
     authenticator = authenticator.replace('\n', '')
-    path = repository_manager.prepare(parameters.sup_repo_url, authenticator)
+    path = repository_manager.prepare(parameters.sup_repo_url, authenticator,
+                                      parameters.packages_list)
     parameters.sup_repo_url = path
     for repository_pair in repository_pairs:
-        path = repository_manager.prepare(repository_pair.url, authenticator)
+        path = repository_manager.prepare(repository_pair.url, authenticator,
+                                          parameters.packages_list)
         repository_pair.url = path
         path_marked = repository_manager.prepare(repository_pair.url_marked,
-                                                 authenticator)
+                                                 authenticator,
+                                                 parameters.packages_list)
         repository_pair.url_marked = path_marked
 
     if repodata_regeneration_enabled:
