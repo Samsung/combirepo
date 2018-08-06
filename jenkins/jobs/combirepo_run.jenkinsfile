@@ -1,0 +1,107 @@
+def jobParameters
+
+pipeline {
+  agent any
+
+  environment {
+    SPIN = credentials("spin_user")
+  }
+
+  parameters {
+    booleanParam(
+      name: 'MIRROR',
+      defaultValue: true,
+      description:
+        """
+        Take packages from non-marked repository if can't find in marked one.
+        Useful if build in marked repository could not be completed in full due to some limitations.
+        """
+    )
+    booleanParam(
+      name: 'GREEDY',
+      defaultValue: true,
+      description:
+        """
+        Greedy mode: get as much packages from marked repository as possible, and get rest from non-marked repository.
+        Useful for massive builds: LTO enabling for whole project, massive sanitizing, compiler options experiments.
+        """           
+    )
+    booleanParam(
+      name: 'DEBUG',
+      defaultValue: false,
+      description:
+        """
+        Enable debug mode (temporaries will be saved). USE WITH CAUTION: produces lots of files.
+        """
+    )
+    booleanParam(
+      name: 'VERBOSE',
+      defaultValue: false,
+      description:
+        """
+        Enable verbose mode: Produces a lot of output, usually helps to identify the issue root cause
+        if the tool doesn't work as intender.
+        """
+    )
+    string(
+      name: 'CACHEDIR',
+      defaultValue: 'tmp',
+      description:
+        """
+        Path to cache directory for the tool.
+        """
+    )
+    string(
+      name: 'OUTDIR',
+      defaultValue: 'mic-output',
+      description:
+        """
+        Output directory for MIC.
+        """
+    )
+    string(
+      name: 'JOBS_NUMBER',
+      defaultValue: '8',
+      description:
+        """
+        Number of parallel jobs.
+        """
+    )
+    choice(
+      name: 'ARCH',
+      choices: 'armv7l\ni686',
+      description: 'Specify repo architecture (in OBS/MIC notation).'
+    )
+    string(
+      name: 'KICKSTART_FILE',
+      defaultValue: 'http://10.113.136.32/download_trbs/snapshots/devel/san/5.0-unified-asan/san-tizen-5.0-unified-asan_20180802.2/images/standard/mobile-wayland-armv7l-tm1/san-tizen-5.0-unified-asan_20180802.2_mobile-wayland-armv7l-tm1.ks',
+      description:
+        """
+        URL of kickstart file used as a template.
+        """
+    )
+  }
+
+  stages {
+    stage('Job initialization') {
+      steps {
+        script {
+          // Add job description
+          Jenkins.instance.getItemByFullName(env.JOB_NAME).setDescription(
+            """
+            This job provides an interface to build partially sanitized images with combirepo tool.
+            """
+          )
+          // jobParameters initialization
+          jobParameters = currentBuild.rawBuild.getAction(ParametersAction)?.getParameters()
+        }
+        echo "jobParameters: ${jobParameters}"
+      }
+    }
+    stage('Build') {
+      steps {
+        sh 'echo "Hello"'
+      }
+    }
+  }
+}
