@@ -27,6 +27,7 @@ import time
 from threading import Lock
 from urlparse import urlparse
 from HTMLParser import HTMLParser
+from rpmUtils.miscutils import splitFilename
 import files
 import hidden_subprocess
 import socket
@@ -115,7 +116,7 @@ def urlopen(url):
     return response
 
 
-def inspect_directory(url, target, check_url):
+def inspect_directory(url, target, check_url, packages_list = None):
     """
     Inspects the given remote directory to the local directory with the
     given path.
@@ -186,12 +187,19 @@ def inspect_directory(url, target, check_url):
             if '?' in name:
                 continue
             links_resolved.append(link)
-            names.append(name)
+            if packages_list is not None:
+                base_name = splitFilename(os.path.basename(name))
+                if base_name:
+                    rpm_name = base_name[0]
+                    if rpm_name in packages_list:
+                        names.append(name)
+            else:
+                names.append(name)
             logging.debug(" * {0}\n".format(link))
         for link in links_resolved:
             mkdir()
             name = link.rsplit('/', 1)[1]
-            inspect_directory(link, os.path.join(target, name), check_url)
+            inspect_directory(link, os.path.join(target, name), check_url, packages_list)
             if not mkdir.done:
                 # We didn't find anything to write inside this directory
                 # Maybe it's a HTML file?
@@ -211,7 +219,7 @@ def inspect_directory(url, target, check_url):
             sizes[target] = response.info().getheaders("Content-Length")[0]
             logging.debug(
                 "Setting size of {0} to {1}\n".format(target, sizes[target]))
-        download_file(response, target)
+            download_file(response, target)
 
 
 def download_file(response, file_path):
@@ -248,7 +256,7 @@ def download_file(response, file_path):
             time.sleep(1)
 
 
-def download_status_callback():
+def download_status_callback(packages_list = None):
     """
     Gets the status of downloading process.
     """
@@ -290,7 +298,7 @@ def download_status_callback():
     return ("Downloading", name_current, num_tasks_done, num_tasks)
 
 
-def download_directory(url, target, check_url, authenticator):
+def download_directory(url, target, check_url, authenticator, packages_list = None):
     """
     Inspects the given remote directory to the local directory with the
     given path.
@@ -311,4 +319,5 @@ def download_directory(url, target, check_url, authenticator):
     global names
     names = []
     hidden_subprocess.function_call_monitor(
-        inspect_directory, (url, target, check_url), download_status_callback)
+        inspect_directory, (url, target, check_url, packages_list),
+        download_status_callback)
