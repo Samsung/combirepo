@@ -77,10 +77,54 @@ pipeline {
     )
     string(
       name: 'KICKSTART_FILE',
-      defaultValue: 'http://10.113.136.32/download_trbs/snapshots/devel/san/5.0-unified-asan/san-tizen-5.0-unified-asan_20180802.2/images/standard/mobile-wayland-armv7l-tm1/san-tizen-5.0-unified-asan_20180802.2_mobile-wayland-armv7l-tm1.ks',
+      defaultValue: '',
       description:
         """
         URL of kickstart file used as a template.
+        """
+    )
+    text(
+      name: 'FORWARD',
+      defaultValue: '',
+      description:
+        """
+        The list of packages that should be marked with all its
+        forward dependencies.
+        """
+    )
+    text(
+      name: 'BACKWARD',
+      defaultValue: '',
+      description:
+        """
+        The list of packages that should be marked with all its
+        backward dependencies (i. e. dependees).
+        """
+    )
+    text(
+      name: 'SINGLE',
+      defaultValue: '',
+      description:
+        """
+        The list of packages that should be marked.
+        """
+    )
+    text(
+      name: 'EXCLUDE',
+      defaultValue: '',
+      description:
+        """
+        The list of packages that should be excluded from the
+        final list of marked packages.
+        """
+    )
+    text(
+      name: 'PREFERABLE',
+      defaultValue: 'terminfo-base-full,glibc-asan',
+      description:
+        """
+        The list of packages that should be prefered in case of
+        "have choice" problem.
         """
     )
   }
@@ -146,6 +190,11 @@ pipeline {
         if ${params.GREEDY}; then greedy="--greedy"; else greedy=""; fi
         if ${params.DEBUG}; then debug="--debug"; else debug=""; fi
         if ${params.VERBOSE}; then verbose="--verbose"; else verbose=""; fi
+        if [ ! -z ${params.FORWARD} ]; then forward="-f ${params.FORWARD}"; else forward=""; fi
+        if [ ! -z ${params.BACKWARD} ]; then backward="-b ${params.BACKWARD}"; else backward=""; fi
+        if [ ! -z ${params.SINGLE} ]; then single="-s ${params.SINGLE}"; else single=""; fi
+        if [ ! -z ${params.EXCLUDE} ]; then exclude="-e ${params.EXCLUDE}"; else exclude=""; fi
+        if [ ! -z ${params.PREFERABLE} ]; then preferable="-p ${params.PREFERABLE}"; else preferable=""; fi
 
         sudo rm -f ${logFile}
         mkdir -p ${params.OUTDIR}
@@ -155,7 +204,7 @@ pipeline {
         -l ${logFile} --tmp-dir ${params.CACHEDIR} -j ${params.JOBS_NUMBER} \
         \${greedy} \${mirror} \${debug} \${verbose} \
         --regenerate-repodata --preferring-strategy big --skip-version-mismatch \
-        -p terminfo-base-full,glibc-asan \
+        \${forward} \${backward} \${single} \${exclude} \${preferable} \
         unified-standard \${unified_repo} \${unified_asan_repo} \
         unified-standard-asan \${unified_repo} \${unified_asan_repo} \
         base-standard \${base_repo} \${base_asan_repo} \
