@@ -107,15 +107,11 @@ pipeline {
       steps {
         script {
           // Add job description
-          Jenkins.instance.getItemByFullName(env.JOB_NAME).setDescription(
+          currentBuild.rawBuild.project.description =
             """
             This job provides an interface to build partially sanitized images with combirepo tool.
             """
-          )
-          // jobParameters initialization
-          jobParameters = currentBuild.rawBuild.getAction(ParametersAction)?.getParameters()
         }
-        echo "jobParameters: ${jobParameters}"
       }
     }
     stage('Fetch repository') {
