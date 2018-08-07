@@ -4,6 +4,9 @@ pipeline {
   agent any
 
   environment {
+    ksFile = "local.ks"
+    logFile = "local.log"
+    pkgFile = "local.packages"
     SPIN = credentials("spin_user")
   }
 
@@ -83,6 +86,23 @@ pipeline {
   }
 
   stages {
+    stage('Prepare packages list') {
+      steps {
+          script {
+              pkgURL = params.KICKSTART_FILE.replace('.ks','.packages')
+              pkgTmp = "tmp.packages"
+              sh """
+              wget ${pkgURL} -O ${pkgTmp} --user ${SPIN_USR} --password ${SPIN_PSW}
+              if [ ! -f ${pkgTmp} ]; then
+                echo "Packages file not found!"
+                exit -1
+              else
+                cat ${pkgTmp} | awk '{print \$1}' | sed -e 's|.${params.ARCH}||g' | sed -e 's|.noarch||g' | sort -n > ${pkgFile}
+              fi
+              """
+          }
+      }
+    }
     stage('Job initialization') {
       steps {
         script {
@@ -98,10 +118,71 @@ pipeline {
         echo "jobParameters: ${jobParameters}"
       }
     }
+    stage('Fetch repository') {
+      steps {
+        git (
+          url: 'https://github.com/Samsung/combirepo.git',
+          credentialsId: '0ba02e82-32b9-4d07-88f0-a6ba9c38e6c6',
+          branch: 'jenkins'
+        )
+      }
+    }
     stage('Build') {
       steps {
-        sh 'echo "Hello"'
+        sh """
+        sudo apt-get install --yes yum python-igraph python-iniparse zlib1g-dev libxml2-dev mic createrepo python-pip qemu-user-static python-configparser python-all dh-make
+
+        sudo ./setup.py build
+        sudo ./setup.py install
+
+        wget ${params.KICKSTART_FILE} -O ${ksFile} --user ${SPIN_USR} --password ${SPIN_PSW}
+        if [ ! -f ${ksFile} ]; then
+            echo "Kickstart file not found!"
+            exit -1
+        fi
+
+        unified_repo=`cat ${ksFile} | grep 'repo --name=unified-standard --baseurl=' | egrep -o 'https?://[^ ]+'`
+        unified_asan_repo=`cat ${ksFile} | grep 'repo --name=unified-standard-asan --baseurl=' | egrep -o 'https?://[^ ]+'`
+        base_repo=`cat ${ksFile} | grep 'repo --name=base-standard --baseurl=' | egrep -o 'https?://[^ ]+'`
+        base_asan_repo=`cat ${ksFile} | grep 'repo --name=base-standard-asan --baseurl=' | egrep -o 'https?://[^ ]+'`
+
+        if ${params.MIRROR}; then mirror="--mirror"; else mirror=""; fi
+        if ${params.GREEDY}; then greedy="--greedy"; else greedy=""; fi
+        if ${params.DEBUG}; then debug="--debug"; else debug=""; fi
+        if ${params.VERBOSE}; then verbose="--verbose"; else verbose=""; fi
+
+        sudo rm -f ${logFile}
+        mkdir -p ${params.OUTDIR}
+        mkdir -p ${params.CACHEDIR}
+
+        sudo combirepo -A ${params.ARCH} -k ${ksFile} --packages-file ${pkgFile} --user ${SPIN_USR} --password ${SPIN_PSW} -o ${OUTDIR} \
+        -l ${logFile} --tmp-dir ${params.CACHEDIR} -j ${params.JOBS_NUMBER} \
+        \${greedy} \${mirror} \${debug} \${verbose} \
+        --regenerate-repodata --preferring-strategy big --skip-version-mismatch \
+        -p terminfo-base-full,glibc-asan \
+        unified-standard \${unified_repo} \${unified_asan_repo} \
+        unified-standard-asan \${unified_repo} \${unified_asan_repo} \
+        base-standard \${base_repo} \${base_asan_repo} \
+        base-standard-asan \${base_repo} \${base_asan_repo}
+        """
       }
+    }
+  }
+  post {
+    always {
+        echo 'Test run completed!'
+    }
+    success {
+        echo 'Successfully!'
+    }
+    failure {
+        echo 'Failed!'
+    }
+    unstable {
+        echo 'Run was marked as unstable!'
+    }
+    changed {
+        echo 'State of the Pipeline has changed!'
     }
   }
 }
