@@ -3,6 +3,11 @@ def jobParameters
 pipeline {
   agent any
 
+  options {
+    skipDefaultCheckout true
+    buildDiscarder(logRotator(numToKeepStr: '20', artifactNumToKeepStr: '20'))
+  }
+
   environment {
     ksFile = "local.ks"
     logFile = "local.log"
@@ -136,7 +141,7 @@ pipeline {
     )
     text(
       name: 'PREFERABLE',
-      defaultValue: 'terminfo-base-full,glibc-asan',
+      defaultValue: '',
       description:
         """
         The list of packages that should be prefered in case of
@@ -146,6 +151,12 @@ pipeline {
   }
 
   stages {
+    stage('Clean and checkout') {
+      steps {
+        cleanWs()
+        checkout scm
+      }
+    }
     stage('Prepare packages list') {
       steps {
         script {
