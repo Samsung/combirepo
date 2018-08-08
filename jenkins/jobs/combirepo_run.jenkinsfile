@@ -7,7 +7,7 @@ pipeline {
     ksFile = "local.ks"
     logFile = "local.log"
     pkgFile = "local.packages"
-    SPIN = credentials("spin_user")
+    OBS = credentials("${params.OBS_ACCOUNT_ID}")
   }
 
   parameters {
@@ -44,6 +44,22 @@ pipeline {
         """
         Enable verbose mode: Produces a lot of output, usually helps to identify the issue root cause
         if the tool doesn't work as intender.
+        """
+    )
+    string(
+      name: 'OBS_ACCOUNT_ID',
+      defaultValue: '',
+      description:
+        """
+        Jenkins credentials ID of OBS account.
+        """
+    )
+    string(
+      name: 'GIT_ACCOUNT_ID',
+      defaultValue: '',
+      description:
+        """
+        Jenkins credentials ID of GIT account.
         """
     )
     string(
@@ -136,7 +152,7 @@ pipeline {
               pkgURL = params.KICKSTART_FILE.replace('.ks','.packages')
               pkgTmp = "tmp.packages"
               sh """
-              wget ${pkgURL} -O ${pkgTmp} --user ${SPIN_USR} --password ${SPIN_PSW}
+              wget ${pkgURL} -O ${pkgTmp} --user ${OBS_USR} --password ${OBS_PSW}
               if [ ! -f ${pkgTmp} ]; then
                 echo "Packages file not found!"
                 exit -1
@@ -162,7 +178,7 @@ pipeline {
       steps {
         git (
           url: 'https://github.com/Samsung/combirepo.git',
-          credentialsId: '0ba02e82-32b9-4d07-88f0-a6ba9c38e6c6',
+          credentialsId: "${params.GIT_ACCOUNT_ID}",
           branch: 'jenkins'
         )
       }
@@ -175,7 +191,7 @@ pipeline {
         sudo ./setup.py build
         sudo ./setup.py install
 
-        wget ${params.KICKSTART_FILE} -O ${ksFile} --user ${SPIN_USR} --password ${SPIN_PSW}
+        wget ${params.KICKSTART_FILE} -O ${ksFile} --user ${OBS_USR} --password ${OBS_PSW}
         if [ ! -f ${ksFile} ]; then
             echo "Kickstart file not found!"
             exit -1
@@ -200,7 +216,7 @@ pipeline {
         mkdir -p ${params.OUTDIR}
         mkdir -p ${params.CACHEDIR}
 
-        sudo combirepo -A ${params.ARCH} -k ${ksFile} --packages-file ${pkgFile} --user ${SPIN_USR} --password ${SPIN_PSW} -o ${OUTDIR} \
+        sudo combirepo -A ${params.ARCH} -k ${ksFile} --packages-file ${pkgFile} --user ${OBS_USR} --password ${OBS_PSW} -o ${OUTDIR} \
         -l ${logFile} --tmp-dir ${params.CACHEDIR} -j ${params.JOBS_NUMBER} \
         \${greedy} \${mirror} \${debug} \${verbose} \
         --regenerate-repodata --preferring-strategy big --skip-version-mismatch \
