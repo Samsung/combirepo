@@ -148,19 +148,19 @@ pipeline {
   stages {
     stage('Prepare packages list') {
       steps {
-          script {
-              pkgURL = params.KICKSTART_FILE.replace('.ks','.packages')
-              pkgTmp = "tmp.packages"
-              sh """
-              wget ${pkgURL} -O ${pkgTmp} --user ${OBS_USR} --password ${OBS_PSW}
-              if [ ! -f ${pkgTmp} ]; then
-                echo "Packages file not found!"
-                exit -1
-              else
-                cat ${pkgTmp} | awk '{print \$1}' | sed -e 's|.${params.ARCH}||g' | sed -e 's|.noarch||g' | sort -n > ${pkgFile}
-              fi
-              """
-          }
+        script {
+            pkgURL = params.KICKSTART_FILE.replace('.ks','.packages')
+            pkgTmp = "tmp.packages"
+            sh """
+            wget ${pkgURL} -O ${pkgTmp} --user ${OBS_USR} --password ${OBS_PSW}
+            if [ ! -f ${pkgTmp} ]; then
+              echo "Packages file not found!"
+              exit 1
+            else
+              cat ${pkgTmp} | awk '{print \$1}' | sed -e 's|.${params.ARCH}||g' | sed -e 's|.noarch||g' | sort -n > ${pkgFile}
+            fi
+            """
+        }
       }
     }
     stage('Job initialization') {
@@ -171,6 +171,54 @@ pipeline {
             """
             This job provides an interface to build partially sanitized images with combirepo tool.
             """
+        }
+      }
+    }
+    stage('Check parameters') {
+      steps {
+        script {
+          def checkStr = { String param, String name ->
+            if (param.isEmpty()) {
+              println "Error: " + name + " is required!"
+              return 1
+            } else {
+              return 0
+            }
+          }
+          def checkPkgs = { String param, String name ->
+            if (!param.isEmpty()) {
+              pkgs = param.split(',')
+              for (p in pkgs) {
+                pkg = p.stripIndent()
+                f = readFile(pkgFile)
+                lines = f.readLines()
+                flag = false
+                for (l in lines) {
+                  if (pkg.equals(l.stripIndent())) {
+                    flag = true
+                    break
+                  }
+                }
+                if (!flag) {
+                  println "Error: " + pkg + " is not found in the packages list!"
+                  println "Error: " + name + " list is corrupted!"
+                  return 1
+                }
+              }
+            }
+            return 0
+          }
+          if (checkStr(params.OBS_ACCOUNT_ID, "OBS_ACCOUNT_ID") ||
+              checkStr(params.GIT_ACCOUNT_ID, "GIT_ACCOUNT_ID") ||
+              checkStr(params.KICKSTART_FILE, "KICKSTART_FILE") ||
+              checkPkgs(params.FORWARD, "FORWARD") ||
+              checkPkgs(params.BACKWARD, "BACKWARD") ||
+              checkPkgs(params.SINGLE, "SINGLE") ||
+              checkPkgs(params.EXCLUDE, "EXCLUDE") ||
+              checkPkgs(params.PREFERABLE, "PREFERABLE")) {
+            println "Error: Parameters check failed!"
+            sh "exit 1"
+          }
         }
       }
     }
@@ -194,7 +242,7 @@ pipeline {
         wget ${params.KICKSTART_FILE} -O ${ksFile} --user ${OBS_USR} --password ${OBS_PSW}
         if [ ! -f ${ksFile} ]; then
             echo "Kickstart file not found!"
-            exit -1
+            exit 1
         fi
 
         unified_repo=`cat ${ksFile} | grep 'repo --name=unified-standard --baseurl=' | egrep -o 'https?://[^ ]+'`
