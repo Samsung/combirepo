@@ -387,7 +387,8 @@ def build_graphs(repository_pair, builder, parameters):
     preferables = parameters.package_names["preferable"]
     graph, back_graph = builder.build_graph(repository_pair.url,
                                             parameters.architecture,
-                                            preferables, strategy)
+                                            preferables, strategy,
+                                            parameters.packages_list)
     # Generally speaking, sets of packages in non-marked and marked
     # repositories can differ. That's why we need to build graphs also for
     # marked repository.
@@ -399,7 +400,8 @@ def build_graphs(repository_pair, builder, parameters):
     marked_graph, _ = builder.build_graph(repository_pair.url_marked,
                                           parameters.architecture,
                                           preferables,
-                                          strategy)
+                                          strategy,
+                                          parameters.packages_list)
     return graph, back_graph, marked_graph
 
 
