@@ -233,15 +233,6 @@ pipeline {
         }
       }
     }
-    stage('Fetch repository') {
-      steps {
-        git (
-          url: 'https://github.com/Samsung/combirepo.git',
-          credentialsId: "${params.GIT_ACCOUNT_ID}",
-          branch: 'jenkins'
-        )
-      }
-    }
     stage('Build') {
       steps {
         sh """
