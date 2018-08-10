@@ -876,11 +876,7 @@ def generate_mic_config(output_directory_path, temporary_directory_path):
     parser.set("create", "tmpdir", mic_directory_path)
     parser.set("create", "cachedir", mic_cache_directory_path)
     parser.set("create", "outdir", output_directory_path)
-    package_manager = None
-    if rpm_patcher.developer_disable_patching:
-        package_manager = "yum"
-    else:
-        package_manager = "zypp"
+    package_manager = "zypp"
     parser.set("create", "pkgmgr", package_manager)
     parser.set("bootstrap", "rootdir", mic_bootstrap_directory_path)
 

@@ -35,6 +35,14 @@ pipeline {
         """           
     )
     booleanParam(
+      name: 'DISABLE_RPM_PATCHING',
+      defaultValue: true,
+      description:
+        """
+        Disable patching of RPM packages in order to make the build faster.
+        """
+    )
+    booleanParam(
       name: 'DEBUG',
       defaultValue: false,
       description:
@@ -254,6 +262,7 @@ pipeline {
 
         if ${params.MIRROR}; then mirror="--mirror"; else mirror=""; fi
         if ${params.GREEDY}; then greedy="--greedy"; else greedy=""; fi
+        if ${params.DISABLE_RPM_PATCHING}; then rpm_patching="--disable-rpm-patching"; else rpm_patching=""; fi
         if ${params.DEBUG}; then debug="--debug"; else debug=""; fi
         if ${params.VERBOSE}; then verbose="--verbose"; else verbose=""; fi
         if [ ! -z ${params.FORWARD} ]; then forward="-f ${params.FORWARD}"; else forward=""; fi
@@ -268,7 +277,7 @@ pipeline {
 
         sudo combirepo -A ${params.ARCH} -k ${ksFile} --packages-file ${pkgFile} --user ${OBS_USR} --password ${OBS_PSW} -o ${OUTDIR} \
         -l ${logFile} --tmp-dir ${params.CACHEDIR} -j ${params.JOBS_NUMBER} \
-        \${greedy} \${mirror} \${debug} \${verbose} \
+        \${greedy} \${mirror} \${rpm_patching} \${debug} \${verbose} \
         --regenerate-repodata --preferring-strategy big --skip-version-mismatch \
         \${forward} \${backward} \${single} \${exclude} \${preferable} \
         unified-standard \${unified_repo} \${unified_asan_repo} \

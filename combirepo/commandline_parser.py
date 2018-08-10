@@ -262,10 +262,7 @@ class CommandlineParser():
         self._parser.add_argument(
             "--disable-rpm-patching", action="store_true", default=False,
             dest="disable_rpm_patching", help="Disable patching of RPM "
-            "packages in order to make the build faster. It causes the "
-            "combirepo to use yum as a package manager inside the image, "
-            "so this option will cause fail if yum does not present in "
-            "the image.")
+            "packages in order to make the build faster.")
         self._parser.add_argument(
             "--drop-patching-cache", action="store_true", default=False,
             dest="drop_patching_cache", help="Drop the cache with patched "
