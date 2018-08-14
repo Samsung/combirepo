@@ -325,14 +325,14 @@ def _search_dependencies(yum_sack, package, providers, preferables, strategy,
                 element = Set([requirement_name])
                 provided_symbols = provided_symbols | element
                 if len(provider) != 1:
-                    providers_in_list = 0
+                    providers_count = 0
                     proper_provider = None
                     if packages_list is not None:
                         for pr in provider:
                             if pr.name in packages_list:
-                                providers_in_list += 1
+                                providers_count += 1
                                 proper_provider = pr
-                    if providers_in_list == 1:
+                    if providers_count == 1:
                         provider = proper_provider.name
                     else:
                         provider = _handle_have_choice_problem(requirement_name,
