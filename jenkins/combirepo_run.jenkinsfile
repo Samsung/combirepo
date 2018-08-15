@@ -9,9 +9,12 @@ pipeline {
   }
 
   environment {
-    ksFile = "local.ks"
-    logFile = "local.log"
-    pkgFile = "local.packages"
+    ksFile = "${WORKSPACE}/local.ks"
+    logFile = "${WORKSPACE}/local.log"
+    pkgFile = "${WORKSPACE}/local.packages"
+    micFile="${WORKSPACE}/jenkins/mic.conf"
+    micDir="${WORKSPACE}/${params.OUTDIR}"
+    cacheDir="${WORKSPACE}/${params.CACHEDIR}"
     OBS = credentials("${params.OBS_ACCOUNT_ID}")
   }
 
@@ -32,7 +35,7 @@ pipeline {
         """
         Greedy mode: get as much packages from marked repository as possible, and get rest from non-marked repository.
         Useful for massive builds: LTO enabling for whole project, massive sanitizing, compiler options experiments.
-        """           
+        """
     )
     booleanParam(
       name: 'DISABLE_RPM_PATCHING',
@@ -283,13 +286,15 @@ pipeline {
           if [ ! -z ${params.PREFERABLE} ]; then preferable="-p ${params.PREFERABLE}"; else preferable=""; fi
 
           sudo rm -f ${logFile}
-          mkdir -p ${params.OUTDIR}
-          mkdir -p ${params.CACHEDIR}
+          mkdir -p ${micDir}
+          mkdir -p ${cacheDir}
 
-          sudo combirepo -A ${params.ARCH} -k ${ksFile} --packages-file ${pkgFile} --user ${OBS_USR} --password ${OBS_PSW} -o ${OUTDIR} \
-          -l ${logFile} --tmp-dir ${params.CACHEDIR} -j ${params.JOBS_NUMBER} \
+          sed -i 's|CACHEDIR|${cacheDir}|g' ${micFile}
+
+          sudo combirepo -A ${params.ARCH} -k ${ksFile} --packages-file ${pkgFile} --user ${OBS_USR} --password ${OBS_PSW} \
+          -o ${micDir} -l ${logFile} --tmp-dir ${cacheDir} -j ${params.JOBS_NUMBER} \
           \${greedy} \${mirror} \${rpm_patching} \${debug} \${verbose} \
-          --regenerate-repodata --preferring-strategy big --skip-version-mismatch \
+          --regenerate-repodata --preferring-strategy big --skip-version-mismatch --mic-options="--config=${micFile}" \
           \${forward} \${backward} \${single} \${exclude} \${preferable} \
           ${unified_repo_name} \${unified_repo} \${unified_asan_repo} \
           ${unified_asan_repo_name} \${unified_repo} \${unified_asan_repo} \
