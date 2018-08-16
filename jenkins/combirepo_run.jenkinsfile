@@ -289,12 +289,10 @@ pipeline {
           mkdir -p ${micDir}
           mkdir -p ${cacheDir}
 
-          sed -i 's|CACHEDIR|${cacheDir}|g' ${micFile}
-
           sudo combirepo -A ${params.ARCH} -k ${ksFile} --packages-file ${pkgFile} --user ${OBS_USR} --password ${OBS_PSW} \
           -o ${micDir} -l ${logFile} --tmp-dir ${cacheDir} -j ${params.JOBS_NUMBER} \
           \${greedy} \${mirror} \${rpm_patching} \${debug} \${verbose} \
-          --regenerate-repodata --preferring-strategy big --skip-version-mismatch --mic-options="--config=${micFile}" \
+          --regenerate-repodata --preferring-strategy big --skip-version-mismatch --mic-config ${micFile} \
           \${forward} \${backward} \${single} \${exclude} \${preferable} \
           ${unified_repo_name} \${unified_repo} \${unified_asan_repo} \
           ${unified_asan_repo_name} \${unified_repo} \${unified_asan_repo} \

@@ -835,7 +835,8 @@ def resolve_groups(repositories, kickstart_file_path):
     return list(packages)
 
 
-def generate_mic_config(output_directory_path, temporary_directory_path):
+def generate_mic_config(output_directory_path, temporary_directory_path,
+                        mic_config_path_default):
     """
     Generates mic config with changed locations of cachedir, tmpdir, rootdir.
 
@@ -852,7 +853,6 @@ def generate_mic_config(output_directory_path, temporary_directory_path):
                       "{0}".format(mic_directory_path))
     parser = configparser.SafeConfigParser()
     mic_config_path = temporaries.create_temporary_file(".mic.conf")
-    mic_config_path_default = "/etc/mic/mic.conf"
     # FIXME: Maybe it will be better to always generate config from scratch?
     if not os.path.isfile(mic_config_path_default):
         logging.warning("Cannot find {0}".format(mic_config_path_default))
@@ -890,7 +890,8 @@ def generate_mic_config(output_directory_path, temporary_directory_path):
 
 
 def initialize_cache_directories(output_directory_path,
-                                 temporary_directory_path):
+                                 temporary_directory_path,
+                                 mic_config_path_default):
     """
     Initializes cache directories specified by user or set by default.
 
@@ -924,7 +925,8 @@ def initialize_cache_directories(output_directory_path,
                       "{0}".format(repository_cache_directory_path))
     global mic_config_path
     mic_config_path = generate_mic_config(output_directory_path,
-                                          temporary_directory_path)
+                                          temporary_directory_path,
+                                          mic_config_path_default)
     patching_cache_path = os.path.join(temporary_directory_path,
                                        "patching_cache")
     if not os.path.isdir(patching_cache_path):
@@ -975,7 +977,8 @@ def combine(parameters):
     @param parameters   The parameters of combirepo run.
     """
     initialize_cache_directories(parameters.output_directory_path,
-                                 parameters.temporary_directory_path)
+                                 parameters.temporary_directory_path,
+                                 parameters.mic_config)
 
     global target_arhcitecture
     target_arhcitecture = parameters.architecture

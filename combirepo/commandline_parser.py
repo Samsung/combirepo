@@ -174,6 +174,9 @@ class CommandlineParser():
             "-o", "--outdir", type=str, action="store", dest="outdir",
             default=".", help="Output directory for MIC.")
         self._parser.add_argument(
+            "-C", "--mic-config", type=str, action="store", dest="mic_config",
+            default="/etc/mic/mic.conf", help="Default config for MIC.")
+        self._parser.add_argument(
             "-M", "--mic-options", action="append", type=str,
             dest="mic_options", help="R|Additional options for MIC."
             "\nDefault option set:"
@@ -408,6 +411,8 @@ class CommandlineParser():
             parameters.kickstart_file_path = arguments.kickstart_file
         if arguments.outdir is not None:
             parameters.output_directory_path = arguments.outdir
+        if arguments.mic_config is not None:
+            parameters.mic_config = arguments.mic_config
         if arguments.mic_options is not None:
             splitted_options = []
             for option in arguments.mic_options:
