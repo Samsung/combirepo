@@ -425,6 +425,7 @@ class CommandlineParser():
         parameters.greedy_mode = arguments.greedy
         parameters.mirror_mode = arguments.mirror
         parameters.skip_mismatch = arguments.skip_mismatch
+        parameters.disable_rpm_patching = arguments.disable_rpm_patching
         if arguments.preferring_strategy is not None:
             parameters.preferring_strategy = arguments.preferring_strategy
         if arguments.sup_repo_url is not None:

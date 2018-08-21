@@ -182,12 +182,16 @@ pipeline {
       steps {
         cleanWs()
         checkout scm
-        sh """
-        git rm rpmrebuild
-        git submodule add ${params.RPMREBUILD_PATH} rpmrebuild
-        git submodule init
-        git submodule update
-        """
+        script {
+          if (!params.DISABLE_RPM_PATCHING) {
+            sh """
+            git rm rpmrebuild
+            git submodule add ${params.RPMREBUILD_PATH} rpmrebuild
+            git submodule init
+            git submodule update
+            """
+          }
+        }
       }
     }
     stage('Prepare packages list') {
@@ -281,14 +285,13 @@ pipeline {
           }
 
           sh """
-          sudo apt-get install --yes yum python-igraph python-iniparse zlib1g-dev libxml2-dev mic createrepo python-pip qemu-user-static python-configparser python-all dh-make
-          python -m pip install --proxy ${params.PROXY} --trusted-host pypi.org --trusted-host files.pythonhosted.org stdeb --user
-
-          sudo ./setup.py sdist
           sudo ./setup.py build
-          sudo ./setup.py --command-packages=stdeb.command bdist_deb
           sudo ./setup.py install
-          sudo dpkg -i deb_dist/combirepo_*.deb
+          if ! ${params.DISABLE_RPM_PATCHING}; then
+              sudo ./setup.py sdist
+              sudo ./setup.py --command-packages=stdeb.command bdist_deb
+              sudo dpkg -i deb_dist/combirepo_*.deb
+          fi
 
           wget ${params.KICKSTART_FILE} -O ${ksFile} --user ${OBS_USR} --password ${OBS_PSW}
           if [ ! -f ${ksFile} ]; then
