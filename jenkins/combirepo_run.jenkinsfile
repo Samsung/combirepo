@@ -71,14 +71,6 @@ pipeline {
         """
     )
     string(
-      name: 'PROXY',
-      defaultValue: '',
-      description:
-        """
-        Jenkins proxy ip:port.
-        """
-    )
-    string(
       name: 'RPMREBUILD_PATH',
       defaultValue: 'https://git.code.sf.net/p/rpmrebuild/git',
       description:
@@ -249,7 +241,6 @@ pipeline {
             return 0
           }
           if (checkStr(params.OBS_ACCOUNT_ID, "OBS_ACCOUNT_ID") ||
-              checkStr(params.PROXY, "PROXY") ||
               checkStr(params.KICKSTART_FILE, "KICKSTART_FILE") ||
               checkPkgs(params.FORWARD, "FORWARD") ||
               checkPkgs(params.BACKWARD, "BACKWARD") ||
