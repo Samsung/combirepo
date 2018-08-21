@@ -71,14 +71,6 @@ pipeline {
         """
     )
     string(
-      name: 'GIT_ACCOUNT_ID',
-      defaultValue: '',
-      description:
-        """
-        Jenkins credentials ID of GIT account.
-        """
-    )
-    string(
       name: 'PROXY',
       defaultValue: '',
       description:
@@ -257,7 +249,6 @@ pipeline {
             return 0
           }
           if (checkStr(params.OBS_ACCOUNT_ID, "OBS_ACCOUNT_ID") ||
-              checkStr(params.GIT_ACCOUNT_ID, "GIT_ACCOUNT_ID") ||
               checkStr(params.PROXY, "PROXY") ||
               checkStr(params.KICKSTART_FILE, "KICKSTART_FILE") ||
               checkPkgs(params.FORWARD, "FORWARD") ||
