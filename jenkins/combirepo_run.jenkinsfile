@@ -267,13 +267,11 @@ pipeline {
           }
 
           sh """
-          sudo ./setup.py build
-          sudo ./setup.py install
+          ./setup.py build
           if ! ${params.DISABLE_RPM_PATCHING}; then
-              sudo ./setup.py sdist
-              sudo ./setup.py --command-packages=stdeb.command bdist_deb
-              sudo dpkg -i deb_dist/combirepo_*.deb
+              ./setup.py sdist
           fi
+          ./setup.py install --user
 
           wget ${params.KICKSTART_FILE} -O ${ksFile} --user ${OBS_USR} --password ${OBS_PSW}
           if [ ! -f ${ksFile} ]; then
@@ -297,11 +295,10 @@ pipeline {
           if [ ! -z ${params.EXCLUDE} ]; then exclude="-e ${params.EXCLUDE}"; else exclude=""; fi
           if [ ! -z ${params.PREFERABLE} ]; then preferable="-p ${params.PREFERABLE}"; else preferable=""; fi
 
-          sudo rm -f ${logFile}
           mkdir -p ${micDir}
           mkdir -p ${cacheDir}
 
-          sudo combirepo -A ${params.ARCH} -k ${ksFile} --packages-file ${pkgFile} --user ${OBS_USR} --password ${OBS_PSW} \
+          combirepo -A ${params.ARCH} -k ${ksFile} --packages-file ${pkgFile} --user ${OBS_USR} --password ${OBS_PSW} \
           -o ${micDir} -l ${logFile} --tmp-dir ${cacheDir} -j ${params.JOBS_NUMBER} \
           \${greedy} \${mirror} \${rpm_patching} \${debug} \${verbose} \
           --regenerate-repodata --preferring-strategy big --skip-version-mismatch --mic-config ${micFile} \
