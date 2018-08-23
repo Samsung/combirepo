@@ -403,6 +403,8 @@ class CommandlineParser():
         parameters.repository_pairs = repository_pairs
         if arguments.packages_file is not None:
             parameters.packages_list = self.__parse_packages_file(arguments.packages_file)
+        else:
+            parameters.packages_list = None
 
         # Process MIC-related options:
         if arguments.architecture is not None:
