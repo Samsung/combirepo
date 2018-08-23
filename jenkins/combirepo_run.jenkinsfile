@@ -1,4 +1,9 @@
-def jobParameters
+def ksFile
+def logFile
+def pkgFile
+def micFile
+def micDir
+def cacheDir
 
 pipeline {
   agent any
@@ -9,12 +14,6 @@ pipeline {
   }
 
   environment {
-    ksFile = "${WORKSPACE}/local.ks"
-    logFile = "${WORKSPACE}/local.log"
-    pkgFile = "${WORKSPACE}/local.packages"
-    micFile="${WORKSPACE}/jenkins/mic.conf"
-    micDir="${WORKSPACE}/${params.OUTDIR}"
-    cacheDir="${WORKSPACE}/${params.CACHEDIR}"
     OBS = credentials("${params.OBS_ACCOUNT_ID}")
   }
 
@@ -80,7 +79,7 @@ pipeline {
     )
     string(
       name: 'CACHEDIR',
-      defaultValue: 'tmp',
+      defaultValue: './tmp',
       description:
         """
         Path to cache directory for the tool.
@@ -88,7 +87,7 @@ pipeline {
     )
     string(
       name: 'OUTDIR',
-      defaultValue: 'mic-output',
+      defaultValue: './mic-output',
       description:
         """
         Output directory for MIC.
@@ -175,6 +174,18 @@ pipeline {
             git submodule update
             """
           }
+        }
+      }
+    }
+    stage('Parameters initialization') {
+      steps {
+        script {
+          ksFile = "./local.ks"
+          logFile = "./local.log"
+          pkgFile = "./local.packages"
+          micFile = "./jenkins/mic.conf"
+          micDir = params.OUTDIR
+          cacheDir = params.CACHEDIR
         }
       }
     }
