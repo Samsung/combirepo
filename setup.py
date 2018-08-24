@@ -51,7 +51,11 @@ class CustomInstallCommand(install):
     def run(self):
         install.run(self)
 
-        prefix = path.abspath(get_config_vars('prefix')[0])
+        if self.user:
+            prefix = path.abspath(get_config_vars('userbase')[0])
+        else:
+            prefix = path.abspath(get_config_vars('prefix')[0])
+
         data_dir = path.abspath(check_data_dir())
         man_file = path.join(data_dir, "combirepo.1")
 

@@ -282,7 +282,8 @@ def _handle_have_choice_problem(requirement, providers, preferables, strategy):
     return provider
 
 
-def _search_dependencies(yum_sack, package, providers, preferables, strategy):
+def _search_dependencies(yum_sack, package, providers, preferables, strategy,
+                         packages_list = None):
     """
     Searches the dependencies of the given package in the repository
 
@@ -324,10 +325,20 @@ def _search_dependencies(yum_sack, package, providers, preferables, strategy):
                 element = Set([requirement_name])
                 provided_symbols = provided_symbols | element
                 if len(provider) != 1:
-                    provider = _handle_have_choice_problem(requirement_name,
-                                                           provider,
-                                                           preferables,
-                                                           strategy)
+                    providers_count = 0
+                    proper_provider = None
+                    if packages_list is not None:
+                        for pr in provider:
+                            if pr.name in packages_list:
+                                providers_count += 1
+                                proper_provider = pr
+                    if providers_count == 1:
+                        provider = proper_provider.name
+                    else:
+                        provider = _handle_have_choice_problem(requirement_name,
+                                                               provider,
+                                                               preferables,
+                                                               strategy)
                 else:
                     provider = provider[0].name
 
@@ -393,7 +404,8 @@ class DependencyGraphBuilder():
         self.preferables.extend(self.packages)
         logging.debug("Initializing dependency graph builder...")
 
-    def build_graph(self, repository_path, arch, preferables, strategy):
+    def build_graph(self, repository_path, arch, preferables, strategy,
+                    packages_list = None):
         """
         Builds the dependency graph of the given repository.
 
@@ -419,7 +431,8 @@ class DependencyGraphBuilder():
         config_path = self.__build_yum_config(repoid)
         self.arch = arch
         yum_base = self.__setup_yum_base(config_path, repoid, self.arch)
-        graph, back_graph = self.__build_dependency_graph(yum_base)
+        graph, back_graph = self.__build_dependency_graph(yum_base,
+                                                          packages_list)
 
         if logging.getLogger().getEffectiveLevel() == logging.DEBUG:
             logging.debug("{0}".format(igraph.summary(graph)))
@@ -661,7 +674,8 @@ class DependencyGraphBuilder():
         back_graph.vs["requirements"] = requirements
         return graph, back_graph
 
-    def __build_dependency_graph_edges(self, yum_base, graph, back_graph):
+    def __build_dependency_graph_edges(self, yum_base, graph, back_graph,
+                                       packages_list = None):
         """
         Builds the edges of dependency graphs.
 
@@ -701,7 +715,7 @@ class DependencyGraphBuilder():
                     continue
                 dependencies, provided, unprovided = _search_dependencies(
                     yum_sack, package, providers, self.preferables,
-                    self.strategy)
+                    self.strategy, packages_list)
 
                 provided = graph.provided_symbols | provided
                 unprovided = graph.unprovided_symbols | unprovided
@@ -792,7 +806,7 @@ class DependencyGraphBuilder():
             # fact that Tizen 2.4 images can be built with MIC even when some
             # such conflicts exist.
 
-    def __build_dependency_graph(self, yum_base):
+    def __build_dependency_graph(self, yum_base, packages_list = None):
         """
         Builds the dependency graph of the repository.
 
@@ -801,6 +815,7 @@ class DependencyGraphBuilder():
         """
         graph, back_graph = self.__build_dependency_graph_vertices(yum_base)
         hidden_subprocess.function_call_monitor(
-            self.__build_dependency_graph_edges, (yum_base, graph, back_graph),
+            self.__build_dependency_graph_edges, (yum_base, graph, back_graph,
+                                                  packages_list),
             dependency_graph_building_status)
         return graph, back_graph

@@ -45,6 +45,7 @@ from repository import Repository, RepositoryData
 from kickstart_parser import KickstartFile
 from config_parser import ConfigParser
 from repository_manager import RepositoryManager
+import runpy
 
 
 repodata_regeneration_enabled = False
@@ -323,14 +324,16 @@ def create_image(arch, repository_names, repository_paths, kickstart_file_path,
 
     # Now create the image using the "mic" tool:
     global mic_config_path
-    mic_command = ["sudo", "mic", "create", "loop",
+    mic_command = ["", "create", "loop",
                    modified_kickstart_file_path, "-A", arch, "--config",
                    mic_config_path, "--tmpfs"]
     if logging.getLogger().getEffectiveLevel() <= logging.DEBUG:
         mic_options.extend(["--debug", "--verbose"])
     if mic_options is not None:
         mic_command.extend(mic_options)
-    hidden_subprocess.call("Building the image", mic_command)
+
+    sys.argv = mic_command
+    runpy.run_path('/usr/bin/mic', run_name='__main__')
 
 
 def inform_about_unprovided(provided_symbols, unprovided_symbols,
@@ -387,7 +390,8 @@ def build_graphs(repository_pair, builder, parameters):
     preferables = parameters.package_names["preferable"]
     graph, back_graph = builder.build_graph(repository_pair.url,
                                             parameters.architecture,
-                                            preferables, strategy)
+                                            preferables, strategy,
+                                            parameters.packages_list)
     # Generally speaking, sets of packages in non-marked and marked
     # repositories can differ. That's why we need to build graphs also for
     # marked repository.
@@ -399,7 +403,8 @@ def build_graphs(repository_pair, builder, parameters):
     marked_graph, _ = builder.build_graph(repository_pair.url_marked,
                                           parameters.architecture,
                                           preferables,
-                                          strategy)
+                                          strategy,
+                                          parameters.packages_list)
     return graph, back_graph, marked_graph
 
 
@@ -833,7 +838,8 @@ def resolve_groups(repositories, kickstart_file_path):
     return list(packages)
 
 
-def generate_mic_config(output_directory_path, temporary_directory_path):
+def generate_mic_config(output_directory_path, temporary_directory_path,
+                        mic_config_path_default):
     """
     Generates mic config with changed locations of cachedir, tmpdir, rootdir.
 
@@ -850,7 +856,6 @@ def generate_mic_config(output_directory_path, temporary_directory_path):
                       "{0}".format(mic_directory_path))
     parser = configparser.SafeConfigParser()
     mic_config_path = temporaries.create_temporary_file(".mic.conf")
-    mic_config_path_default = "/etc/mic/mic.conf"
     # FIXME: Maybe it will be better to always generate config from scratch?
     if not os.path.isfile(mic_config_path_default):
         logging.warning("Cannot find {0}".format(mic_config_path_default))
@@ -874,11 +879,7 @@ def generate_mic_config(output_directory_path, temporary_directory_path):
     parser.set("create", "tmpdir", mic_directory_path)
     parser.set("create", "cachedir", mic_cache_directory_path)
     parser.set("create", "outdir", output_directory_path)
-    package_manager = None
-    if rpm_patcher.developer_disable_patching:
-        package_manager = "yum"
-    else:
-        package_manager = "zypp"
+    package_manager = "zypp"
     parser.set("create", "pkgmgr", package_manager)
     parser.set("bootstrap", "rootdir", mic_bootstrap_directory_path)
 
@@ -892,7 +893,8 @@ def generate_mic_config(output_directory_path, temporary_directory_path):
 
 
 def initialize_cache_directories(output_directory_path,
-                                 temporary_directory_path):
+                                 temporary_directory_path,
+                                 mic_config_path_default):
     """
     Initializes cache directories specified by user or set by default.
 
@@ -926,7 +928,8 @@ def initialize_cache_directories(output_directory_path,
                       "{0}".format(repository_cache_directory_path))
     global mic_config_path
     mic_config_path = generate_mic_config(output_directory_path,
-                                          temporary_directory_path)
+                                          temporary_directory_path,
+                                          mic_config_path_default)
     patching_cache_path = os.path.join(temporary_directory_path,
                                        "patching_cache")
     if not os.path.isdir(patching_cache_path):
@@ -977,7 +980,8 @@ def combine(parameters):
     @param parameters   The parameters of combirepo run.
     """
     initialize_cache_directories(parameters.output_directory_path,
-                                 parameters.temporary_directory_path)
+                                 parameters.temporary_directory_path,
+                                 parameters.mic_config)
 
     global target_arhcitecture
     target_arhcitecture = parameters.architecture
@@ -997,10 +1001,12 @@ def combine(parameters):
     initialize()
     combined_repositories = construct_combined_repositories(parameters,
                                                             packages)
-    mic_options = ["--shrink"]
+    if parameters.disable_rpm_patching:
+        mic_options = ["--shrink"]
+    else:
+        mic_options = []
     if parameters.mic_options is list:
         mic_options.extend(parameters.mic_options)
-    hidden_subprocess.visible_mode = True
 
     ks_modified_path = temporaries.create_temporary_file("mod.ks")
     shutil.copy(parameters.kickstart_file_path, ks_modified_path)
@@ -1013,7 +1019,6 @@ def combine(parameters):
                  parameters.kickstart_file_path,
                  mic_options,
                  parameters.package_names["service"])
-    hidden_subprocess.visible_mode = False
 
     if "libasan" in parameters.package_names["service"] and libasan_preloading:
         images_dict = kickstart_file.get_images_mount_points()

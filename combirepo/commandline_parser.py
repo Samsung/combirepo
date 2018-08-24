@@ -174,6 +174,9 @@ class CommandlineParser():
             "-o", "--outdir", type=str, action="store", dest="outdir",
             default=".", help="Output directory for MIC.")
         self._parser.add_argument(
+            "-C", "--mic-config", type=str, action="store", dest="mic_config",
+            default="/etc/mic/mic.conf", help="Default config for MIC.")
+        self._parser.add_argument(
             "-M", "--mic-options", action="append", type=str,
             dest="mic_options", help="R|Additional options for MIC."
             "\nDefault option set:"
@@ -262,10 +265,7 @@ class CommandlineParser():
         self._parser.add_argument(
             "--disable-rpm-patching", action="store_true", default=False,
             dest="disable_rpm_patching", help="Disable patching of RPM "
-            "packages in order to make the build faster. It causes the "
-            "combirepo to use yum as a package manager inside the image, "
-            "so this option will cause fail if yum does not present in "
-            "the image.")
+            "packages in order to make the build faster.")
         self._parser.add_argument(
             "--drop-patching-cache", action="store_true", default=False,
             dest="drop_patching_cache", help="Drop the cache with patched "
@@ -403,6 +403,8 @@ class CommandlineParser():
         parameters.repository_pairs = repository_pairs
         if arguments.packages_file is not None:
             parameters.packages_list = self.__parse_packages_file(arguments.packages_file)
+        else:
+            parameters.packages_list = None
 
         # Process MIC-related options:
         if arguments.architecture is not None:
@@ -411,6 +413,8 @@ class CommandlineParser():
             parameters.kickstart_file_path = arguments.kickstart_file
         if arguments.outdir is not None:
             parameters.output_directory_path = arguments.outdir
+        if arguments.mic_config is not None:
+            parameters.mic_config = arguments.mic_config
         if arguments.mic_options is not None:
             splitted_options = []
             for option in arguments.mic_options:
@@ -423,6 +427,7 @@ class CommandlineParser():
         parameters.greedy_mode = arguments.greedy
         parameters.mirror_mode = arguments.mirror
         parameters.skip_mismatch = arguments.skip_mismatch
+        parameters.disable_rpm_patching = arguments.disable_rpm_patching
         if arguments.preferring_strategy is not None:
             parameters.preferring_strategy = arguments.preferring_strategy
         if arguments.sup_repo_url is not None:

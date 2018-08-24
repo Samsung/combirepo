@@ -1,4 +1,9 @@
-def jobParameters
+def ksFile
+def logFile
+def pkgFile
+def micFile
+def micDir
+def cacheDir
 
 pipeline {
   agent any
@@ -9,9 +14,6 @@ pipeline {
   }
 
   environment {
-    ksFile = "local.ks"
-    logFile = "local.log"
-    pkgFile = "local.packages"
     OBS = credentials("${params.OBS_ACCOUNT_ID}")
   }
 
@@ -32,7 +34,15 @@ pipeline {
         """
         Greedy mode: get as much packages from marked repository as possible, and get rest from non-marked repository.
         Useful for massive builds: LTO enabling for whole project, massive sanitizing, compiler options experiments.
-        """           
+        """
+    )
+    booleanParam(
+      name: 'DISABLE_RPM_PATCHING',
+      defaultValue: true,
+      description:
+        """
+        Disable patching of RPM packages in order to make the build faster.
+        """
     )
     booleanParam(
       name: 'DEBUG',
@@ -60,16 +70,16 @@ pipeline {
         """
     )
     string(
-      name: 'GIT_ACCOUNT_ID',
-      defaultValue: '',
+      name: 'RPMREBUILD_PATH',
+      defaultValue: 'https://git.code.sf.net/p/rpmrebuild/git',
       description:
         """
-        Jenkins credentials ID of GIT account.
+        Path to rpmrebuild directory.
         """
     )
     string(
       name: 'CACHEDIR',
-      defaultValue: 'tmp',
+      defaultValue: './tmp',
       description:
         """
         Path to cache directory for the tool.
@@ -77,7 +87,7 @@ pipeline {
     )
     string(
       name: 'OUTDIR',
-      defaultValue: 'mic-output',
+      defaultValue: './mic-output',
       description:
         """
         Output directory for MIC.
@@ -155,6 +165,28 @@ pipeline {
       steps {
         cleanWs()
         checkout scm
+        script {
+          if (!params.DISABLE_RPM_PATCHING) {
+            sh """
+            git rm rpmrebuild
+            git submodule add ${params.RPMREBUILD_PATH} rpmrebuild
+            git submodule init
+            git submodule update
+            """
+          }
+        }
+      }
+    }
+    stage('Parameters initialization') {
+      steps {
+        script {
+          ksFile = "./local.ks"
+          logFile = "./local.log"
+          pkgFile = "./local.packages"
+          micFile = "./jenkins/mic.conf"
+          micDir = params.OUTDIR
+          cacheDir = params.CACHEDIR
+        }
       }
     }
     stage('Prepare packages list') {
@@ -220,7 +252,6 @@ pipeline {
             return 0
           }
           if (checkStr(params.OBS_ACCOUNT_ID, "OBS_ACCOUNT_ID") ||
-              checkStr(params.GIT_ACCOUNT_ID, "GIT_ACCOUNT_ID") ||
               checkStr(params.KICKSTART_FILE, "KICKSTART_FILE") ||
               checkPkgs(params.FORWARD, "FORWARD") ||
               checkPkgs(params.BACKWARD, "BACKWARD") ||
@@ -233,58 +264,62 @@ pipeline {
         }
       }
     }
-    stage('Fetch repository') {
-      steps {
-        git (
-          url: 'https://github.com/Samsung/combirepo.git',
-          credentialsId: "${params.GIT_ACCOUNT_ID}",
-          branch: 'jenkins'
-        )
-      }
-    }
     stage('Build') {
       steps {
-        sh """
-        sudo apt-get install --yes yum python-igraph python-iniparse zlib1g-dev libxml2-dev mic createrepo python-pip qemu-user-static python-configparser python-all dh-make
+        script {
+          unified_repo_name=""
+          unified_asan_repo_name=""
+          if (params.ARCH == "armv7l") {
+            unified_repo_name="unified-standard"
+            unified_asan_repo_name="unified-standard-asan"
+          } else if (params.ARCH == "i686") {
+            unified_repo_name="unified-emulator"
+            unified_asan_repo_name="unified-emulator-asan"
+          }
 
-        sudo ./setup.py build
-        sudo ./setup.py install
+          sh """
+          ./setup.py build
+          if ! ${params.DISABLE_RPM_PATCHING}; then
+              ./setup.py sdist
+          fi
+          ./setup.py install --user
 
-        wget ${params.KICKSTART_FILE} -O ${ksFile} --user ${OBS_USR} --password ${OBS_PSW}
-        if [ ! -f ${ksFile} ]; then
-            echo "Kickstart file not found!"
-            exit 1
-        fi
+          wget ${params.KICKSTART_FILE} -O ${ksFile} --user ${OBS_USR} --password ${OBS_PSW}
+          if [ ! -f ${ksFile} ]; then
+              echo "Kickstart file not found!"
+              exit 1
+          fi
 
-        unified_repo=`cat ${ksFile} | grep 'repo --name=unified-standard --baseurl=' | egrep -o 'https?://[^ ]+'`
-        unified_asan_repo=`cat ${ksFile} | grep 'repo --name=unified-standard-asan --baseurl=' | egrep -o 'https?://[^ ]+'`
-        base_repo=`cat ${ksFile} | grep 'repo --name=base-standard --baseurl=' | egrep -o 'https?://[^ ]+'`
-        base_asan_repo=`cat ${ksFile} | grep 'repo --name=base-standard-asan --baseurl=' | egrep -o 'https?://[^ ]+'`
+          unified_repo=`cat ${ksFile} | grep 'repo --name=${unified_repo_name} --baseurl=' | egrep -o 'https?://[^ ]+'`
+          unified_asan_repo=`cat ${ksFile} | grep 'repo --name=${unified_asan_repo_name} --baseurl=' | egrep -o 'https?://[^ ]+'`
+          base_repo=`cat ${ksFile} | grep 'repo --name=base-standard --baseurl=' | egrep -o 'https?://[^ ]+'`
+          base_asan_repo=`cat ${ksFile} | grep 'repo --name=base-standard-asan --baseurl=' | egrep -o 'https?://[^ ]+'`
 
-        if ${params.MIRROR}; then mirror="--mirror"; else mirror=""; fi
-        if ${params.GREEDY}; then greedy="--greedy"; else greedy=""; fi
-        if ${params.DEBUG}; then debug="--debug"; else debug=""; fi
-        if ${params.VERBOSE}; then verbose="--verbose"; else verbose=""; fi
-        if [ ! -z ${params.FORWARD} ]; then forward="-f ${params.FORWARD}"; else forward=""; fi
-        if [ ! -z ${params.BACKWARD} ]; then backward="-b ${params.BACKWARD}"; else backward=""; fi
-        if [ ! -z ${params.SINGLE} ]; then single="-s ${params.SINGLE}"; else single=""; fi
-        if [ ! -z ${params.EXCLUDE} ]; then exclude="-e ${params.EXCLUDE}"; else exclude=""; fi
-        if [ ! -z ${params.PREFERABLE} ]; then preferable="-p ${params.PREFERABLE}"; else preferable=""; fi
+          if ${params.MIRROR}; then mirror="--mirror"; else mirror=""; fi
+          if ${params.GREEDY}; then greedy="--greedy"; else greedy=""; fi
+          if ${params.DISABLE_RPM_PATCHING}; then rpm_patching="--disable-rpm-patching"; else rpm_patching=""; fi
+          if ${params.DEBUG}; then debug="--debug"; else debug=""; fi
+          if ${params.VERBOSE}; then verbose="--verbose"; else verbose=""; fi
+          if [ ! -z ${params.FORWARD} ]; then forward="-f ${params.FORWARD}"; else forward=""; fi
+          if [ ! -z ${params.BACKWARD} ]; then backward="-b ${params.BACKWARD}"; else backward=""; fi
+          if [ ! -z ${params.SINGLE} ]; then single="-s ${params.SINGLE}"; else single=""; fi
+          if [ ! -z ${params.EXCLUDE} ]; then exclude="-e ${params.EXCLUDE}"; else exclude=""; fi
+          if [ ! -z ${params.PREFERABLE} ]; then preferable="-p ${params.PREFERABLE}"; else preferable=""; fi
 
-        sudo rm -f ${logFile}
-        mkdir -p ${params.OUTDIR}
-        mkdir -p ${params.CACHEDIR}
+          mkdir -p ${micDir}
+          mkdir -p ${cacheDir}
 
-        sudo combirepo -A ${params.ARCH} -k ${ksFile} --packages-file ${pkgFile} --user ${OBS_USR} --password ${OBS_PSW} -o ${OUTDIR} \
-        -l ${logFile} --tmp-dir ${params.CACHEDIR} -j ${params.JOBS_NUMBER} \
-        \${greedy} \${mirror} \${debug} \${verbose} \
-        --regenerate-repodata --preferring-strategy big --skip-version-mismatch \
-        \${forward} \${backward} \${single} \${exclude} \${preferable} \
-        unified-standard \${unified_repo} \${unified_asan_repo} \
-        unified-standard-asan \${unified_repo} \${unified_asan_repo} \
-        base-standard \${base_repo} \${base_asan_repo} \
-        base-standard-asan \${base_repo} \${base_asan_repo}
-        """
+          combirepo -A ${params.ARCH} -k ${ksFile} --packages-file ${pkgFile} --user ${OBS_USR} --password ${OBS_PSW} \
+          -o ${micDir} -l ${logFile} --tmp-dir ${cacheDir} -j ${params.JOBS_NUMBER} \
+          \${greedy} \${mirror} \${rpm_patching} \${debug} \${verbose} \
+          --regenerate-repodata --preferring-strategy big --skip-version-mismatch --mic-config ${micFile} \
+          \${forward} \${backward} \${single} \${exclude} \${preferable} \
+          ${unified_repo_name} \${unified_repo} \${unified_asan_repo} \
+          ${unified_asan_repo_name} \${unified_repo} \${unified_asan_repo} \
+          base-standard \${base_repo} \${base_asan_repo} \
+          base-standard-asan \${base_repo} \${base_asan_repo}
+          """
+        }
       }
     }
   }
