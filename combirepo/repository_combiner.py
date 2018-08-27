@@ -602,10 +602,6 @@ def initialize():
     """
     Initializes the repository combiner.
     """
-    if os.geteuid() != 0:
-        print("Changing user to SUDO user...")
-        os.execvp("sudo", ["sudo"] + sys.argv)
-
     # These commands will be called in subprocesses, so we need to be sure
     # that they exist in the current environment:
     for command in ["mic", "createrepo", "modifyrepo", "sudo", "ls",
