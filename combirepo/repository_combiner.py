@@ -45,7 +45,6 @@ from repository import Repository, RepositoryData
 from kickstart_parser import KickstartFile
 from config_parser import ConfigParser
 from repository_manager import RepositoryManager
-import runpy
 
 
 repodata_regeneration_enabled = False
@@ -324,16 +323,14 @@ def create_image(arch, repository_names, repository_paths, kickstart_file_path,
 
     # Now create the image using the "mic" tool:
     global mic_config_path
-    mic_command = ["", "create", "loop",
+    mic_command = ["sudo", "mic", "create", "loop",
                    modified_kickstart_file_path, "-A", arch, "--config",
                    mic_config_path, "--tmpfs"]
     if logging.getLogger().getEffectiveLevel() <= logging.DEBUG:
         mic_options.extend(["--debug", "--verbose"])
     if mic_options is not None:
         mic_command.extend(mic_options)
-
-    sys.argv = mic_command
-    runpy.run_path('/usr/bin/mic', run_name='__main__')
+    hidden_subprocess.call("Building the image", mic_command)
 
 
 def inform_about_unprovided(provided_symbols, unprovided_symbols,
@@ -605,10 +602,6 @@ def initialize():
     """
     Initializes the repository combiner.
     """
-    if os.geteuid() != 0:
-        print("Changing user to SUDO user...")
-        os.execvp("sudo", ["sudo"] + sys.argv)
-
     # These commands will be called in subprocesses, so we need to be sure
     # that they exist in the current environment:
     for command in ["mic", "createrepo", "modifyrepo", "sudo", "ls",
@@ -1007,6 +1000,7 @@ def combine(parameters):
         mic_options = []
     if parameters.mic_options is list:
         mic_options.extend(parameters.mic_options)
+    hidden_subprocess.visible_mode = True
 
     ks_modified_path = temporaries.create_temporary_file("mod.ks")
     shutil.copy(parameters.kickstart_file_path, ks_modified_path)
@@ -1019,6 +1013,7 @@ def combine(parameters):
                  parameters.kickstart_file_path,
                  mic_options,
                  parameters.package_names["service"])
+    hidden_subprocess.visible_mode = False
 
     if "libasan" in parameters.package_names["service"] and libasan_preloading:
         images_dict = kickstart_file.get_images_mount_points()
