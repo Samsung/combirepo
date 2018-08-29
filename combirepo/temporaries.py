@@ -30,7 +30,6 @@ import files
 debug_mode = False
 default_directory = None
 
-
 def create_temporary_file(file_suffix):
     """
     Creates temporary file in tmpfs, named as follows:
@@ -89,12 +88,12 @@ def mount_image(directory, image_path):
 
     @return                 The path to created temporary directory.
     """
-    value = subprocess.call(["mount", "-o", "rw,loop", image_path, directory])
+    value = subprocess.call(["sudo", "mount", "-o", "rw,loop", image_path, directory])
     if value != 0:
         logging.error("Failed to mount image.")
         sys.exit("Error.")
     if not debug_mode:
-        atexit.register(subprocess.call, ["umount", "-l", directory])
+        atexit.register(subprocess.call, ["sudo", "umount", "-l", directory])
     logging.debug("Mounted image {0} to {1}".format(image_path, directory))
     return
 

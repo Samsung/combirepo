@@ -175,18 +175,20 @@ def create_patched_packages(queue):
     @param root             The root to be used.
     """
     root = queue.get()
-    logging.debug("Chrooting to {0}".format(root))
-    os.chroot(root)
-    logging.debug("Chrooting to {0} done.".format(root))
-    os.chdir("/")
-    if not os.path.isfile("/Makefile"):
+
+    if not os.path.isfile(root + "/Makefile"):
         logging.info("Chroot has no jobs to perform.")
         queue.task_done()
         return
 
-    make_command = ["make"]
-    if not hidden_subprocess.visible_mode:
-        make_command.append("--silent")
+    logging.debug("Chrooting to {0}".format(root))
+    dev_path = os.path.join(root, "dev/")
+    hidden_subprocess.call("Mount devtmpfs",
+                           ["sudo", "mount", "-t", "devtmpfs", "none", dev_path])
+    make_command = ["sudo", "chroot", root, "bash", "-c",
+                    """chmod +x /usr/bin/cpio;
+                       chmod +x /usr/bin/make;
+                       make --silent"""]
     subprocess.call(make_command)
     logging.debug("Exiting from {0}".format(root))
     queue.task_done()
@@ -357,17 +359,9 @@ class RpmPatcher():
 
         @param queue    The queue where the result will be put.
         """
-        os.chroot(self.patching_root)
-        os.chdir("/")
-        os.chdir("/rpmrebuild/src")
-        # NOTE: Uncomment following line if 'make' is not executable in the built image
-        #       (only for debugging purposes)
-        # hidden_subprocess.call("Preparing 'make'", ["chmod", "+x", "/usr/bin/make"])
-        hidden_subprocess.call("Making the rpmrebuild.", ["make"])
-        hidden_subprocess.call("Installing the rpmrebuild.",
-                               ["make", "install"])
-        if not check.command_exists("rpmrebuild"):
-            sys.exit("Error.")
+        make_command = ["sudo", "chroot", self.patching_root, "bash", "-c",
+                        """cd /rpmrebuild/src; chmod +x /usr/bin/make; make; make install"""]
+        hidden_subprocess.call("Make and install the rpmrebuild.", make_command)
         queue.put(True)
 
     def __prepare(self):
@@ -394,12 +388,10 @@ class RpmPatcher():
         already_present_rpmrebuilds = files.find_fast(self.patching_root,
                                                       "rpmrebuild.*")
         for already_present_rpmrebuild in already_present_rpmrebuilds:
-            if os.path.isdir(already_present_rpmrebuild):
-                shutil.rmtree(already_present_rpmrebuild)
-            elif os.path.isfile(already_present_rpmrebuild):
-                os.remove(already_present_rpmrebuild)
+            hidden_subprocess.call("Remove already presented rpmrebuild.",
+                                   ["sudo", "rm", "-rf", already_present_rpmrebuild])
         hidden_subprocess.call("Extracting the rpmrebuild ",
-                               ["tar", "xf", rpmrebuild_file, "-C",
+                               ["sudo", "tar", "xf", rpmrebuild_file, "-C",
                                 self.patching_root])
 
         queue = multiprocessing.Queue()
@@ -458,10 +450,21 @@ class RpmPatcher():
         """
         makefile_path = os.path.join(root, "Makefile")
         results_path = os.path.join(root, "rpmrebuild_results")
+
+        if os.path.isfile(makefile_path):
+            hidden_subprocess.call("Remove Makefile.",
+                                   ["sudo", "rm", makefile_path])
+        hidden_subprocess.call("Create Makefile.",
+                               ["sudo", "touch", makefile_path, "&&",
+                               "sudo", "chmod", "a+rw", makefile_path])
+        hidden_subprocess.call("Change mode of Makefile.",
+                               ["sudo", "chmod", "a+rw", makefile_path])
         if os.path.isdir(results_path):
-            shutil.rmtree(results_path)
-        os.mkdir(results_path)
-        with open(makefile_path, "wb") as makefile:
+            hidden_subprocess.call("Remove results_path directory.",
+                                   ["sudo", "rm", "-rf", results_path])
+        hidden_subprocess.call("Create results_path directory.",
+                               ["sudo", "mkdir", "-m", "666", results_path])
+        with open(makefile_path, "ab") as makefile:
             makefile.write("all:")
             for task in tasks:
                 package_name, _, _, _, _ = task
@@ -594,7 +597,7 @@ class RpmPatcher():
             self.patching_root_clones.append(clone_path)
             clone_tasks.append(
                 ("chroot #{0}".format(i),
-                 ["cp", "-a", self.patching_root, clone_path]))
+                 ["sudo", "cp", "-a", self.patching_root, clone_path]))
         hidden_subprocess.function_call_list(
             "Cloning chroot", subprocess.call, clone_tasks)
 
@@ -603,7 +606,6 @@ class RpmPatcher():
         Deploys packages to chroot clones and generates makefiles for them.
         """
         self._tasks.sort(key=lambda task: os.stat(task[1]).st_size)
-        copy_tasks = []
         for i in range(repository_combiner.jobs_number):
             tasks = []
             i_task = i
@@ -617,21 +619,19 @@ class RpmPatcher():
             directories = {}
             for task in tasks:
                 package_name, package_path, target, _, _ = task
-                copy_tasks.append((package_name, package_path,
-                                   self.patching_root_clones[i]))
                 self._targets[package_name] = target
                 basename = os.path.basename(target)
                 self._package_names[basename] = package_name
+                hidden_subprocess.call("Copying to patcher",
+                                       ["sudo", "cp", package_path,
+                                       self.patching_root_clones[i]])
             self._generate_makefile(self.patching_root_clones[i], tasks)
-        hidden_subprocess.function_call_list(
-            "Copying to patcher", shutil.copy, copy_tasks)
 
     def __postprocess_cache(self):
         """
         Postprocesses the patching RPMs cache.
         """
         results = self._get_results()
-        copy_tasks = []
         for result in results:
             name, path, _ = result
             global patching_cache_path
@@ -648,22 +648,19 @@ class RpmPatcher():
             info = "{0}".format(matching_task)
             with open(info_path, "wb") as info_file:
                 info_file.write(info)
-            copy_tasks.append((name, path, destination_path))
-        hidden_subprocess.function_call_list(
-            "Copying to cache", shutil.copy, copy_tasks)
+            hidden_subprocess.call("Copying to cache",
+                                   ["sudo", "cp", path, destination_path])
 
     def __process_results(self):
         """
         Processes final results of patcher.
         """
         results = self._get_results()
-        copy_tasks = []
         for info in results:
             name, path, _ = info
             target = self._targets[name]
-            copy_tasks.append((name, path, target))
-        hidden_subprocess.function_call_list(
-            "Copying to repo", shutil.copy, copy_tasks)
+            hidden_subprocess.call("Copying to repo",
+                                   ["sudo", "cp", path, target])
 
     def __use_cached_root_or_prepare(self):
         """

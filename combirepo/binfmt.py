@@ -22,7 +22,7 @@ import os
 import sys
 import logging
 import check
-
+import hidden_subprocess
 
 binfmt_directory = "/proc/sys/fs/binfmt_misc"
 
@@ -51,10 +51,8 @@ def disable_all():
     """
     binfmt_status_path = os.path.join(binfmt_directory, "status")
     check.file_exists(binfmt_status_path)
-
-    with open(binfmt_status_path, 'w') as binfmt_status:
-        binfmt_status.write("-1\n")
-
+    disable_command = ["sudo", "echo", "-1\n", ">", binfmt_status_path]
+    hidden_subprocess.call("Disable binary formats.", disable_command)
 
 binfmt_magic = {}
 binfmt_mask = {}
@@ -104,5 +102,5 @@ def register(architecture, qemu_executable_path):
                                                      binfmt_mask[binfmt_name],
                                                      qemu_executable_path,
                                                      binfmt_flag[qemu_type])
-    with open(binfmt_register_path, 'w') as binfmt_register:
-        binfmt_register.write(binary_format)
+    register_command = ["sudo", "echo", binary_format, ">", binfmt_register_path]
+    hidden_subprocess.call("Register binary formats.", register_command)
