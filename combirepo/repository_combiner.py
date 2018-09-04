@@ -841,8 +841,8 @@ def generate_mic_config(output_directory_path, temporary_directory_path,
     """
     mic_directory_path = os.path.join(temporary_directory_path, "mic")
     mic_cache_directory_path = os.path.join(mic_directory_path, "cache")
-    mic_bootstrap_directory_path = os.path.join(mic_directory_path,
-                                                "bootstrap")
+    mic_bootstrap_directory_path = os.path.join(temporary_directory_path,
+                                                "mic-bootstrap")
     if not os.path.isdir(mic_directory_path):
         os.makedirs(mic_directory_path)
         logging.debug("Created directory for mic's cache "
