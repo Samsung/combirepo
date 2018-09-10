@@ -186,8 +186,7 @@ def create_patched_packages(queue):
     hidden_subprocess.call("Mount devtmpfs",
                            ["sudo", "mount", "-t", "devtmpfs", "none", dev_path])
     make_command = ["sudo", "chroot", root, "bash", "-c",
-                    """chmod +x /usr/bin/cpio;
-                       chmod +x /usr/bin/make;
+                    """chmod +x /usr/bin/*;
                        make --silent"""]
     subprocess.call(make_command)
     logging.debug("Exiting from {0}".format(root))
