@@ -462,7 +462,7 @@ class RpmPatcher():
             hidden_subprocess.call("Remove results_path directory.",
                                    ["sudo", "rm", "-rf", results_path])
         hidden_subprocess.call("Create results_path directory.",
-                               ["sudo", "mkdir", "-m", "666", results_path])
+                               ["sudo", "mkdir", "-m", "777", results_path])
         with open(makefile_path, "ab") as makefile:
             makefile.write("all:")
             for task in tasks:
