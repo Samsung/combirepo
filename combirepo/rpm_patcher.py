@@ -454,8 +454,7 @@ class RpmPatcher():
             hidden_subprocess.call("Remove Makefile.",
                                    ["sudo", "rm", makefile_path])
         hidden_subprocess.call("Create Makefile.",
-                               ["sudo", "touch", makefile_path, "&&",
-                               "sudo", "chmod", "a+rw", makefile_path])
+                               ["sudo", "touch", makefile_path])
         hidden_subprocess.call("Change mode of Makefile.",
                                ["sudo", "chmod", "a+rw", makefile_path])
         if os.path.isdir(results_path):
@@ -696,7 +695,7 @@ class RpmPatcher():
                     self.patching_root) + "preliminary_image")
             hidden_subprocess.call(
                 "Saving chroot to cache",
-                ["cp", "-a", self.patching_root, cached_chroot_path])
+                ["sudo", "cp", "-a", self.patching_root, cached_chroot_path])
             info_path = cached_chroot_path + ".info.txt"
             with open(info_path, "wb") as info_file:
                 info_file.write(image_info)
