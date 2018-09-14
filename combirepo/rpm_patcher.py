@@ -182,13 +182,15 @@ def create_patched_packages(queue):
         return
 
     logging.debug("Chrooting to {0}".format(root))
-    dev_path = os.path.join(root, "dev/")
+    dev_path = os.path.join(root, "dev/null")
     hidden_subprocess.call("Mount devtmpfs",
-                           ["sudo", "mount", "-t", "devtmpfs", "none", dev_path])
+                           ["sudo", "mount", "-o", "bind", "/dev/null", dev_path])
     make_command = ["sudo", "chroot", root, "bash", "-c",
                     """chmod +x /usr/bin/*;
                        make --silent"""]
-    subprocess.call(make_command)
+    hidden_subprocess.call("Start rpm patching", make_command)
+    hidden_subprocess.call("Umount devtmpfs",
+                           ["sudo", "umount", dev_path])
     logging.debug("Exiting from {0}".format(root))
     queue.task_done()
 
@@ -359,7 +361,7 @@ class RpmPatcher():
         @param queue    The queue where the result will be put.
         """
         make_command = ["sudo", "chroot", self.patching_root, "bash", "-c",
-                        """cd /rpmrebuild/src; chmod +x /usr/bin/make; make; make install"""]
+                        """cd /rpmrebuild/src; make; make install"""]
         hidden_subprocess.call("Make and install the rpmrebuild.", make_command)
         queue.put(True)
 
@@ -660,6 +662,16 @@ class RpmPatcher():
             hidden_subprocess.call("Copying to repo",
                                    ["sudo", "cp", path, target])
 
+    def __umount_root(self):
+        """
+        Processes final results of patcher.
+        """
+        kickstart_file = KickstartFile(self.kickstart_file_path)
+        images_dict = kickstart_file.get_images_mount_points()
+        temporaries.umount_image(self.patching_root)
+        if "modules.img" in images_dict:
+            temporaries.umount_image(os.path.join(self.patching_root, images_dict["modules.img"]))
+
     def __use_cached_root_or_prepare(self):
         """
         Tries to find cached root and uses it in case it exists and prepares
@@ -691,11 +703,11 @@ class RpmPatcher():
         else:
             self.__prepare()
             cached_chroot_path = os.path.join(
-                patching_cache_path, os.path.basename(
-                    self.patching_root) + "preliminary_image")
+            patching_cache_path, os.path.basename(
+                self.patching_root) + "preliminary_image")
             hidden_subprocess.call(
                 "Saving chroot to cache",
-                ["sudo", "cp", "-a", self.patching_root, cached_chroot_path])
+                ["sudo", "cp", "-P", "-a", self.patching_root, cached_chroot_path])
             info_path = cached_chroot_path + ".info.txt"
             with open(info_path, "wb") as info_file:
                 info_file.write(image_info)
@@ -718,6 +730,7 @@ class RpmPatcher():
                     self.__patch_packages, (), self._status_callback)
                 self.__postprocess_cache()
                 self.__process_results()
+                self.__umount_root()
 
     def __prepare_image(self, graphs):
         """

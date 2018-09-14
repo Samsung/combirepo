@@ -98,6 +98,22 @@ def mount_image(directory, image_path):
     return
 
 
+def umount_image(directory):
+    """
+    Umount temporary mount point of the given directory.
+
+    default_directory/combirepo.<random>.<suffix>.
+
+    @param directory        The path to the directory.
+    """
+    value = subprocess.call(["sudo", "umount", "-l", directory])
+    if value != 0:
+        logging.error("Failed to umount image.")
+        sys.exit("Error.")
+    logging.debug("Umounted {0}".format(directory))
+    return
+
+
 def __find_platform_images(images_directory):
     """
     Finds the platform images in the directory.
