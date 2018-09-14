@@ -201,6 +201,8 @@ pipeline {
               exit 1
             else
               cat ${pkgTmp} | awk '{print \$1}' | sed -e 's|.${params.ARCH}||g' | sed -e 's|.noarch||g' | sort -n > ${pkgFile}
+              echo 'cpio' >> ${pkgFile}
+              echo 'mic-bootstrap-x86-arm' >> ${pkgFile}
             fi
             """
         }

@@ -186,16 +186,18 @@ def inspect_directory(url, target, check_url, packages_list = None):
             name = link.rsplit('/', 1)[1]
             if '?' in name:
                 continue
-            links_resolved.append(link)
-            if packages_list is not None:
-                base_name = splitFilename(os.path.basename(name))
-                if base_name:
-                    rpm_name = base_name[0]
-                    if rpm_name in packages_list:
-                        names.append(name)
+            if name.endswith('.rpm'):
+                if packages_list is not None:
+                    base_name = splitFilename(os.path.basename(name))
+                    if base_name:
+                        rpm_name = base_name[0]
+                        if rpm_name in packages_list:
+                            links_resolved.append(link)
+                            logging.debug(" * {0}\n".format(link))
+                            names.append(name)
             else:
-                names.append(name)
-            logging.debug(" * {0}\n".format(link))
+                links_resolved.append(link)
+                logging.debug(" * {0}\n".format(link))
         for link in links_resolved:
             mkdir()
             name = link.rsplit('/', 1)[1]
@@ -256,7 +258,7 @@ def download_file(response, file_path):
             time.sleep(1)
 
 
-def download_status_callback(packages_list = None):
+def download_status_callback():
     """
     Gets the status of downloading process.
     """
@@ -267,34 +269,27 @@ def download_status_callback(packages_list = None):
         sizes_copy = sizes.copy()
     global names
     logging.debug("Length of sizes is {0}.\n".format(len(sizes)))
-    name_current = None
+    name_current = "unknown"
     for path, size in sizes_copy.iteritems():
         logging.debug("Analyzing {0} that must have size {1}.\n".format(path, size))
         name = os.path.basename(path)
         if os.path.isfile(path):
             size_actual = os.stat(path).st_size
             if (int(size) > 0 and int(size_actual) == int(size) and name in names):
+                name_current = name
                 paths.append(path)
                 logging.debug("   collected!\n")
-            else:
+            elif int(size_actual) != int(size):
                 logging.debug("   Size of {0} is {1} while must be {2}.\n".format(
                     path, size_actual, size))
-                name_current = name
         else:
             logging.debug("   not a file.\n")
     logging.debug("--- Found {0} collected ---\n".format(len(paths)))
-    if len(paths) > 0:
-        paths.sort(key=lambda path: os.path.getmtime(path))
-        name_last = os.path.basename(paths[-1])
-    else:
-        name_last = "unknown"
     if len(names) > 0:
         num_tasks = len(names)
     else:
         num_tasks = 1
     num_tasks_done = len(paths)
-    if name_current is None:
-        name_current = name_last
     return ("Downloading", name_current, num_tasks_done, num_tasks)
 
 
