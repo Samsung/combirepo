@@ -51,7 +51,7 @@ def disable_all():
     """
     binfmt_status_path = os.path.join(binfmt_directory, "status")
     check.file_exists(binfmt_status_path)
-    disable_command = ["sudo", "echo", "-1\n", ">", binfmt_status_path]
+    disable_command = ["echo", "-1", "|", "sudo", "tee", binfmt_status_path]
     hidden_subprocess.call("Disable binary formats.", disable_command)
 
 binfmt_magic = {}
@@ -102,5 +102,5 @@ def register(architecture, qemu_executable_path):
                                                      binfmt_mask[binfmt_name],
                                                      qemu_executable_path,
                                                      binfmt_flag[qemu_type])
-    register_command = ["sudo", "echo", binary_format, ">", binfmt_register_path]
+    register_command = ["echo", "\"" + binary_format + "\"", "|", "sudo", "tee", binfmt_register_path]
     hidden_subprocess.call("Register binary formats.", register_command)
