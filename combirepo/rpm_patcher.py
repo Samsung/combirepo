@@ -117,8 +117,8 @@ def prepare_minimal_packages_list(graphs):
                                 "\"{0}\":".format(symbol))
                 for provider in providers[symbol]:
                     logging.warning(" * {0}".format(provider))
-
-        packages.append(providers[symbol].pop())
+        if len(providers[symbol]) > 0:
+            packages.append(providers[symbol].pop())
 
     logging.debug("Minimal packages list:")
     for package in packages:
@@ -318,6 +318,8 @@ class RpmPatcher():
         logging.warning("Found several qemu executables:")
         working_executables = []
         for path in executables:
+            if "bootstrap" in path:
+                continue
             relative_path = os.path.relpath(path, self.patching_root)
             if check.command_exists(path):
                 working_executables.append(path)
@@ -361,7 +363,7 @@ class RpmPatcher():
         @param queue    The queue where the result will be put.
         """
         make_command = ["sudo", "chroot", self.patching_root, "bash", "-c",
-                        """cd /rpmrebuild/src; make; make install"""]
+                        """chmod +x /usr/bin/*; cd /rpmrebuild/src; make; make install"""]
         hidden_subprocess.call("Make and install the rpmrebuild.", make_command)
         queue.put(True)
 
@@ -504,6 +506,8 @@ class RpmPatcher():
                 continue
             paths = files.find_fast(results_path, ".*\.rpm")
             for path in paths:
+                if not os.path.basename(path) in self._package_names:
+                    continue
                 name = self._package_names[os.path.basename(path)]
                 if name is None:
                     continue

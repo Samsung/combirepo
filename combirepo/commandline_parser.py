@@ -360,12 +360,20 @@ class CommandlineParser():
             repository_pairs.append(repository_pair)
         return repository_pairs
 
-    def __parse_packages_file(self, packages_file):
+    def __parse_packages_file(self, packages_file, disable_rpm_patching = False):
         packages_list = []
         if packages_file is not None:
             with open(packages_file, 'r') as pkg_file:
                 for package in pkg_file:
                     packages_list.append(package.strip())
+        packages_list.append("mic-bootstrap-x86-arm")
+        if not disable_rpm_patching:
+            deps = ["binutils", "bzip2", "cpio", "gcc", "glibc-devel",
+                    "libatomic", "libcc1", "libitm", "libubsan",
+                    "linux-glibc-devel", "make", "perl", "patch",
+                    "rpm-build", "qemu-accel-x86_64-armv7l",
+                    "qemu-linux-user-x86_64-cross"]
+            packages_list.extend(deps)
         return packages_list
 
     def __build_package_names(self, arguments):
@@ -402,7 +410,8 @@ class CommandlineParser():
         repository_pairs = self.__build_repository_pairs(arguments)
         parameters.repository_pairs = repository_pairs
         if arguments.packages_file is not None:
-            parameters.packages_list = self.__parse_packages_file(arguments.packages_file)
+            parameters.packages_list = self.__parse_packages_file(arguments.packages_file,
+                                                                  arguments.disable_rpm_patching)
         else:
             parameters.packages_list = None
 
