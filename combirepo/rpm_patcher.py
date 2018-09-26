@@ -31,7 +31,6 @@ from sets import Set
 import files
 import check
 import hidden_subprocess
-import binfmt
 from kickstart_parser import KickstartFile
 import repository_combiner
 
@@ -309,10 +308,10 @@ class RpmPatcher():
             qemu_name = "^qemu-{0}$".format(arch)
             qemu_binfmt_name = "^qemu-{0}-binfmt$".format(arch)
             executables_portion = files.find_fast(self.patching_root,
-                                                  qemu_binfmt_name)
+                                                  qemu_name)
             executables.extend(executables_portion)
             executables_portion = files.find_fast(self.patching_root,
-                                                  qemu_name)
+                                                  qemu_binfmt_name)
             executables.extend(executables_portion)
 
         logging.warning("Found several qemu executables:")
@@ -353,8 +352,9 @@ class RpmPatcher():
             self.__unpack_qemu_packages()
             qemu_executable_path = self.__find_qemu_executable()
 
-        binfmt.disable_all()
-        binfmt.register(self.architecture, qemu_executable_path)
+        combirepo_dir = os.path.abspath(os.path.dirname(__file__))
+        subprocess.call(["sudo", "python", os.path.join(combirepo_dir, "binfmt.py"),
+                         "-a", self.architecture, "-q", qemu_executable_path])
 
     def __install_rpmrebuild(self, queue):
         """
