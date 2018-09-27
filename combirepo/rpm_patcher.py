@@ -181,15 +181,15 @@ def create_patched_packages(queue):
         return
 
     logging.debug("Chrooting to {0}".format(root))
-    dev_path = os.path.join(root, "dev/null")
+    dev_null_path = os.path.join(root, "dev/null")
     hidden_subprocess.call("Mount devtmpfs",
-                           ["sudo", "mount", "-o", "bind", "/dev/null", dev_path])
+                           ["sudo", "mount", "-o", "bind", "/dev/null", dev_null_path])
     make_command = ["sudo", "chroot", root, "bash", "-c",
-                    """chmod +x /usr/bin/*;
+                    """chmod a+x /usr/bin/*;
                        make --silent"""]
     hidden_subprocess.call("Start rpm patching", make_command)
     hidden_subprocess.call("Umount devtmpfs",
-                           ["sudo", "umount", dev_path])
+                           ["sudo", "umount", dev_null_path])
     logging.debug("Exiting from {0}".format(root))
     queue.task_done()
 
@@ -353,7 +353,7 @@ class RpmPatcher():
             qemu_executable_path = self.__find_qemu_executable()
 
         combirepo_dir = os.path.abspath(os.path.dirname(__file__))
-        subprocess.call(["sudo", "python", os.path.join(combirepo_dir, "binfmt.py"),
+        subprocess.call(["sudo", "python2", os.path.join(combirepo_dir, "binfmt.py"),
                          "-a", self.architecture, "-q", qemu_executable_path])
 
     def __install_rpmrebuild(self, queue):
@@ -363,7 +363,7 @@ class RpmPatcher():
         @param queue    The queue where the result will be put.
         """
         make_command = ["sudo", "chroot", self.patching_root, "bash", "-c",
-                        """chmod +x /usr/bin/*; cd /rpmrebuild/src; make; make install"""]
+                        """chmod a+x /usr/bin/*; cd /rpmrebuild/src && make && make install"""]
         hidden_subprocess.call("Make and install the rpmrebuild.", make_command)
         queue.put(True)
 
@@ -668,7 +668,7 @@ class RpmPatcher():
 
     def __umount_root(self):
         """
-        Processes final results of patcher.
+        Umount preliminary images.
         """
         kickstart_file = KickstartFile(self.kickstart_file_path)
         images_dict = kickstart_file.get_images_mount_points()
@@ -711,7 +711,8 @@ class RpmPatcher():
                 self.patching_root) + "preliminary_image")
             hidden_subprocess.call(
                 "Saving chroot to cache",
-                ["sudo", "cp", "-P", "-a", self.patching_root, cached_chroot_path])
+                ["sudo", "cp", "-Z", "-P", "-a", self.patching_root,
+                cached_chroot_path])
             info_path = cached_chroot_path + ".info.txt"
             with open(info_path, "wb") as info_file:
                 info_file.write(image_info)

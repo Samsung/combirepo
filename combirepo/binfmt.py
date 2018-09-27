@@ -110,7 +110,7 @@ def __parse_args():
     """ customize arguments """
     parser = argparse.ArgumentParser(description='Register qemu in binfmt_misc.')
     parser.add_argument('--arch', '-a', default='armv7l', help='target architecture')
-    parser.add_argument('--qemu', '-q', default='/usr/bin/qemu', help='path to qemu executable')
+    parser.add_argument('--qemu', '-q', default='/usr/bin/qemu-arm', help='path to qemu executable')
 
     return parser.parse_args()
 
