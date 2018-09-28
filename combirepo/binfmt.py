@@ -22,12 +22,12 @@ import os
 import sys
 import logging
 import check
-
+import argparse
 
 binfmt_directory = "/proc/sys/fs/binfmt_misc"
 
 
-def get_name(architecture):
+def __get_name(architecture):
     """
     Gets the name of binfmt file by the architecture.
 
@@ -45,16 +45,14 @@ def get_name(architecture):
     return binfmt_name
 
 
-def disable_all():
+def __disable_all():
     """
     Disables or registered binary formats
     """
     binfmt_status_path = os.path.join(binfmt_directory, "status")
     check.file_exists(binfmt_status_path)
-
     with open(binfmt_status_path, 'w') as binfmt_status:
         binfmt_status.write("-1\n")
-
 
 binfmt_magic = {}
 binfmt_mask = {}
@@ -83,7 +81,7 @@ binfmt_flag["qemu"] = "OC"
 binfmt_flag["qemu-wrapper"] = "P"
 
 
-def register(architecture, qemu_executable_path):
+def __register(architecture, qemu_executable_path):
     """
     Register the binary format for the given architecture.
 
@@ -98,7 +96,7 @@ def register(architecture, qemu_executable_path):
     binfmt_register_path = os.path.join(binfmt_directory, "register")
     check.file_exists(binfmt_register_path)
 
-    binfmt_name = get_name(architecture)
+    binfmt_name = __get_name(architecture)
     binary_format = ":{0}:M::{1}:{2}:{3}:{4}".format(binfmt_name,
                                                      binfmt_magic[binfmt_name],
                                                      binfmt_mask[binfmt_name],
@@ -106,3 +104,22 @@ def register(architecture, qemu_executable_path):
                                                      binfmt_flag[qemu_type])
     with open(binfmt_register_path, 'w') as binfmt_register:
         binfmt_register.write(binary_format)
+
+
+def __parse_args():
+    """ customize arguments """
+    parser = argparse.ArgumentParser(description='Register qemu in binfmt_misc.')
+    parser.add_argument('--arch', '-a', default='armv7l', help='target architecture')
+    parser.add_argument('--qemu', '-q', default='/usr/bin/qemu-arm', help='path to qemu executable')
+
+    return parser.parse_args()
+
+
+def main(argv):
+    args = __parse_args()
+    __disable_all()
+    __register(args.arch, args.qemu)
+
+
+if __name__ == "__main__":
+    exit(main(sys.argv))

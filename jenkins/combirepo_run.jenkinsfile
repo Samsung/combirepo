@@ -201,8 +201,6 @@ pipeline {
               exit 1
             else
               cat ${pkgTmp} | awk '{print \$1}' | sed -e 's|.${params.ARCH}||g' | sed -e 's|.noarch||g' | sort -n > ${pkgFile}
-              echo 'cpio' >> ${pkgFile}
-              echo 'mic-bootstrap-x86-arm' >> ${pkgFile}
             fi
             """
         }
@@ -297,6 +295,9 @@ pipeline {
           base_repo=`cat ${ksFile} | grep 'repo --name=base-standard --baseurl=' | egrep -o 'https?://[^ ]+'`
           base_asan_repo=`cat ${ksFile} | grep 'repo --name=base-standard-asan --baseurl=' | egrep -o 'https?://[^ ]+'`
 
+          sed -i "/${unified_asan_repo_name}/d" ${ksFile}
+          sed -i "/base-standard-asan/d" ${ksFile}
+
           if ${params.MIRROR}; then mirror="--mirror"; else mirror=""; fi
           if ${params.GREEDY}; then greedy="--greedy"; else greedy=""; fi
           if ${params.DISABLE_RPM_PATCHING}; then rpm_patching="--disable-rpm-patching"; else rpm_patching=""; fi
@@ -315,11 +316,10 @@ pipeline {
           -o ${micDir} -l ${logFile} --tmp-dir ${cacheDir} -j ${params.JOBS_NUMBER} \
           \${greedy} \${mirror} \${rpm_patching} \${debug} \${verbose} \
           --regenerate-repodata --preferring-strategy big --skip-version-mismatch --mic-config ${micFile} \
+          -S make,cpio,rpm-build \
           \${forward} \${backward} \${single} \${exclude} \${preferable} \
           ${unified_repo_name} \${unified_repo} \${unified_asan_repo} \
-          ${unified_asan_repo_name} \${unified_repo} \${unified_asan_repo} \
-          base-standard \${base_repo} \${base_asan_repo} \
-          base-standard-asan \${base_repo} \${base_asan_repo}
+          base-standard \${base_repo} \${base_asan_repo}
           """
         }
       }
