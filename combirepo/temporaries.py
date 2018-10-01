@@ -168,3 +168,19 @@ def mount_firmware(firmware_path, images_dict):
     __mount_images(images, root, images_dict)
 
     return root
+
+
+def mount_bind(root, mount_point):
+    """
+    Bind mount directory.
+
+    @param root           The path to the root.
+    @param mount_point    Directory to mount.
+
+    """
+    logging.debug("Bind mount {0}".format(mount_point))
+    value = subprocess.call(["sudo", "mount", "--bind", "/" + mount_point,
+                             os.path.join(root, mount_point)])
+    if value != 0:
+        logging.error("Failed to mount {0}.".format(mount_point))
+        sys.exit("Error.")

@@ -181,15 +181,11 @@ def create_patched_packages(queue):
         return
 
     logging.debug("Chrooting to {0}".format(root))
-    dev_null_path = os.path.join(root, "dev/null")
-    hidden_subprocess.call("Mount devtmpfs",
-                           ["sudo", "mount", "-o", "bind", "/dev/null", dev_null_path])
     make_command = ["sudo", "chroot", root, "bash", "-c",
                     """chmod a+x /usr/bin/*;
                        make --silent"""]
     hidden_subprocess.call("Start rpm patching", make_command)
-    hidden_subprocess.call("Umount devtmpfs",
-                           ["sudo", "umount", dev_null_path])
+
     logging.debug("Exiting from {0}".format(root))
     queue.task_done()
 
@@ -222,6 +218,8 @@ class RpmPatcher():
         self._targets = {}
         self._package_names = {}
         self._graphs = graphs
+        self.images_dict = {}
+        self.mount_points = []
 
     def __produce_architecture_synonyms_list(self, architecture):
         """
@@ -376,11 +374,9 @@ class RpmPatcher():
         if developer_disable_patching:
             logging.debug("RPM patcher will not be prepared.")
             return
-        kickstart_file = KickstartFile(self.kickstart_file_path)
-        images_dict = kickstart_file.get_images_mount_points()
         graphs = self._graphs
         self.__prepare_image(graphs)
-        self.patching_root = temporaries.mount_firmware(self.images_directory, images_dict)
+        self.__mount_root()
         host_arch = platform.machine()
         host_arches = self.__produce_architecture_synonyms_list(host_arch)
         if self.architecture not in host_arches:
@@ -666,15 +662,42 @@ class RpmPatcher():
             hidden_subprocess.call("Copying to repo",
                                    ["sudo", "cp", path, target])
 
+    def __mount_root(self):
+        """
+        Mount preliminary images.
+        """
+        kickstart_file = KickstartFile(self.kickstart_file_path)
+        self.images_dict = kickstart_file.get_images_mount_points()
+        self.patching_root = temporaries.mount_firmware(self.images_directory,
+                                                        self.images_dict)
+
     def __umount_root(self):
         """
         Umount preliminary images.
         """
-        kickstart_file = KickstartFile(self.kickstart_file_path)
-        images_dict = kickstart_file.get_images_mount_points()
-        temporaries.umount_image(self.patching_root)
-        if "modules.img" in images_dict:
-            temporaries.umount_image(os.path.join(self.patching_root, images_dict["modules.img"]))
+        if self.images_dict:
+            temporaries.umount_image(self.patching_root)
+            if "modules.img" in self.images_dict:
+                temporaries.umount_image(os.path.join(self.patching_root,
+                                                      self.images_dict["modules.img"]))
+
+    def __mount_fs(self):
+        """
+        Mount system directories required for patching.
+        """
+        self.mount_points = ["sys", "proc", "dev", "dev/pts", "dev/null",
+                             "/dev/mqueue", "/dev/shm"]
+        for root in self.patching_root_clones:
+            for mount_point in self.mount_points:
+                temporaries.mount_bind(root, mount_point)
+
+    def __umount_fs(self):
+        """
+        Umount system directories required for patching.
+        """
+        for root in self.patching_root_clones:
+            for mount_point in reversed(self.mount_points):
+                temporaries.umount_image(os.path.join(root, mount_point))
 
     def __use_cached_root_or_prepare(self):
         """
@@ -730,12 +753,14 @@ class RpmPatcher():
             if len(self._tasks) > 0:
                 self.__use_cached_root_or_prepare()
                 self.__clone_chroots()
+                self.__umount_root()
+                self.__mount_fs()
                 self.__deploy_packages()
                 hidden_subprocess.function_call_monitor(
                     self.__patch_packages, (), self._status_callback)
                 self.__postprocess_cache()
                 self.__process_results()
-                self.__umount_root()
+                self.__umount_fs()
 
     def __prepare_image(self, graphs):
         """
