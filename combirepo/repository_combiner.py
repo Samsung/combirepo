@@ -932,7 +932,7 @@ def initialize_cache_directories(output_directory_path,
     rpm_patcher.patching_cache_path = patching_cache_path
 
 
-def prepend_preload_library(library_name, output_directory_path):
+def prepend_preload_library(library_name, output_directory_path, images_dict):
     """
     Prepends library
     """
@@ -953,7 +953,7 @@ def prepend_preload_library(library_name, output_directory_path):
     library_path_real = library_paths_real[0]
     library_basename = os.path.basename(library_path_real)
 
-    root = temporaries.mount_firmware(output_directory_path)
+    root = temporaries.mount_firmware(output_directory_path, images_dict)
     ld_preload_path = os.path.join(root, "etc/ld.so.preload")
     lines = ["{0}\n".format(library_basename)]
     if os.path.isfile(ld_preload_path):
