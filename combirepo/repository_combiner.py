@@ -37,7 +37,6 @@ import mic.kickstart
 from mic.utils.misc import get_pkglist_in_comps
 from dependency_graph_builder import DependencyGraphBuilder
 import temporaries
-import binfmt
 import files
 import check
 import rpm_patcher
@@ -330,6 +329,12 @@ def create_image(arch, repository_names, repository_paths, kickstart_file_path,
         mic_options.extend(["--debug", "--verbose"])
     if mic_options is not None:
         mic_command.extend(mic_options)
+    if "arm" in arch:
+        combirepo_dir = os.path.abspath(os.path.dirname(__file__))
+        qemu_executable_path = "/usr/bin/qemu-arm"
+        hidden_subprocess.call("Register {0} in binfmt_misc".format(qemu_executable_path),
+                               ["sudo", "python2", os.path.join(combirepo_dir, "binfmt.py"),
+                               "-a", arch, "-q", qemu_executable_path])
     hidden_subprocess.call("Building the image", mic_command)
 
 
