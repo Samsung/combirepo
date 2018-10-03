@@ -183,6 +183,7 @@ def create_patched_packages(queue):
     logging.debug("Chrooting to {0}".format(root))
     make_command = ["sudo", "chroot", root, "bash", "-c",
                     """chmod a+x /usr/bin/*;
+                       rpm --rebuilddb;
                        make --silent"""]
     hidden_subprocess.call("Start rpm patching", make_command)
 
@@ -306,10 +307,10 @@ class RpmPatcher():
             qemu_name = "^qemu-{0}$".format(arch)
             qemu_binfmt_name = "^qemu-{0}-binfmt$".format(arch)
             executables_portion = files.find_fast(self.patching_root,
-                                                  qemu_name)
+                                                  qemu_binfmt_name)
             executables.extend(executables_portion)
             executables_portion = files.find_fast(self.patching_root,
-                                                  qemu_binfmt_name)
+                                                  qemu_name)
             executables.extend(executables_portion)
 
         logging.warning("Found several qemu executables:")
