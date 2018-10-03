@@ -366,7 +366,8 @@ class CommandlineParser():
             with open(packages_file, 'r') as pkg_file:
                 for package in pkg_file:
                     packages_list.append(package.strip())
-        packages_list.append("mic-bootstrap-x86-arm")
+        packages_list.extend(["mic-bootstrap-x86-arm", "libasan",
+                             "asan-runtime-env"])
         if not disable_rpm_patching:
             deps = ["binutils", "bzip2", "cpio", "gcc", "glibc-devel",
                     "libatomic", "libcc1", "libitm", "libubsan",

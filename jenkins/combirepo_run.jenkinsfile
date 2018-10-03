@@ -316,7 +316,7 @@ pipeline {
           -o ${micDir} -l ${logFile} --tmp-dir ${cacheDir} -j ${params.JOBS_NUMBER} \
           \${greedy} \${mirror} \${rpm_patching} \${debug} \${verbose} \
           --regenerate-repodata --preferring-strategy big --skip-version-mismatch --mic-config ${micFile} \
-          -S make,cpio,rpm-build \
+          -S asan-runtime-env \
           \${forward} \${backward} \${single} \${exclude} \${preferable} \
           ${unified_repo_name} \${unified_repo} \${unified_asan_repo} \
           base-standard \${base_repo} \${base_asan_repo}
