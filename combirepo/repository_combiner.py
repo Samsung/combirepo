@@ -965,10 +965,8 @@ def combine(parameters):
     initialize()
     combined_repositories = construct_combined_repositories(parameters,
                                                             packages)
-    if parameters.disable_rpm_patching:
-        mic_options = ["--shrink"]
-    else:
-        mic_options = []
+    mic_options = ["--shrink"]
+
     if parameters.mic_options is list:
         mic_options.extend(parameters.mic_options)
     hidden_subprocess.visible_mode = True
