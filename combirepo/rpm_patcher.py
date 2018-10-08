@@ -480,6 +480,7 @@ class RpmPatcher():
                 for update in updates:
                     command = build_requirement_command(update)
                     commands.append(command)
+                commands.append("s|^%posttrans -p *|%posttrans|g")
                 sed_command = "sed"
                 for command in commands:
                     sed_command += " -e \"{0}\"".format(command)
