@@ -430,6 +430,9 @@ def process_repository_pair(repository_pair, graphs, parameters,
         marked_packages = Set(marked_graph.vs["name"])
         for package in marked_packages:
             logging.debug("Package {0} is marked".format(package))
+        for package in parameters.package_names["excluded"]:
+            if not graph.get_name_id(package) is None:
+                marked_packages = marked_packages - Set([package])
         for package in graph.vs["name"]:
             if package not in marked_packages:
                 logging.debug("!!! Package {0} is NOT marked "
