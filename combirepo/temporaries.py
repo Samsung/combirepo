@@ -30,6 +30,18 @@ import files
 debug_mode = False
 default_directory = None
 
+def __umask_temporary_file(path, mode):
+    """
+    Changes mode of temporary file or directory:
+
+    @param path    Path to the file.
+    @param mode    New file mode.
+    """
+    umask = os.umask(0)
+    os.chmod(path, mode)
+    os.umask(umask)
+
+
 def create_temporary_file(file_suffix):
     """
     Creates temporary file in tmpfs, named as follows:
@@ -43,10 +55,12 @@ def create_temporary_file(file_suffix):
     global default_directory
     if not os.path.isdir(default_directory):
         os.makedirs(default_directory)
+        __umask_temporary_file(default_directory, 0777)
     file_descriptor, path = tempfile.mkstemp(prefix='combirepo.',
                                              suffix="." + file_suffix,
                                              dir=default_directory)
     os.close(file_descriptor)  # This helps to avoid the file descriptor leak.
+    __umask_temporary_file(path, 0666)
     if not debug_mode:
         atexit.register(os.remove, path)  # It will be removed at exit.
     logging.debug("Created temporary file {0}".format(path))
@@ -66,9 +80,11 @@ def create_temporary_directory(directory_suffix):
     global default_directory
     if not os.path.isdir(default_directory):
         os.makedirs(default_directory)
+        __umask_temporary_file(default_directory, 0777)
     path = tempfile.mkdtemp(prefix='combirepo.',
                             suffix="." + directory_suffix,
                             dir=default_directory)
+    __umask_temporary_file(path, 0777)
     if not debug_mode:
         atexit.register(shutil.rmtree, path)  # It will be removed at exit.
     logging.debug("Created temporary file {0}".format(path))
