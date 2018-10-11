@@ -183,7 +183,7 @@ def create_patched_packages(queue):
     logging.debug("Chrooting to {0}".format(root))
     make_command = ["sudo", "chroot", root, "bash", "-c",
                     """chmod a+x /usr/bin/*;
-                       rpm --rebuilddb;
+                       rm -f /var/lib/rpm/__db.*;
                        make --silent"""]
     hidden_subprocess.call("Start rpm patching", make_command)
 
@@ -481,6 +481,10 @@ class RpmPatcher():
                     command = build_requirement_command(update)
                     commands.append(command)
                 commands.append("s|^%posttrans -p *|%posttrans|g")
+                subpackages_ends = ["compat", "dbinit", "profile_tv", "profile_mobile",
+                                    "profile_wearable", "profile_ivi", "profile_common"]
+                for end in subpackages_ends:
+                    commands.append("s|{0} = \([0-9\.\+a-z]\+\)-\([0-9\.\+a-z]\+\)|{0} = \\1-{1}|g".format(end, release))
                 sed_command = "sed"
                 for command in commands:
                     sed_command += " -e \"{0}\"".format(command)
