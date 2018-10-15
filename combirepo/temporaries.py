@@ -122,11 +122,12 @@ def umount_image(directory):
 
     @param directory        The path to the directory.
     """
-    value = subprocess.call(["sudo", "umount", "-l", directory])
-    if value != 0:
-        logging.error("Failed to umount image.")
-        sys.exit("Error.")
-    logging.debug("Umounted {0}".format(directory))
+    if os.path.ismount(directory):
+        value = subprocess.call(["sudo", "umount", "-l", directory])
+        if value != 0:
+            logging.error("Failed to umount image.")
+            sys.exit("Error.")
+        logging.debug("Umounted {0}".format(directory))
     return
 
 
@@ -148,7 +149,7 @@ def __find_platform_images(images_directory):
     return images
 
 
-def __mount_images(images, directory, images_dict):
+def __mount_images(images, directory, images_dict_list):
     """
     Mounts the images (rootfs, system-data, user and etc) to the given
     directory.
@@ -156,19 +157,18 @@ def __mount_images(images, directory, images_dict):
     @param images       The list of paths to images.
     @param directory    The mount directory.
     """
-    for image in images:
-        img_name = os.path.basename(image)
-        if img_name in images_dict:
-            mount_point = images_dict[img_name]
-            mount_dir = os.path.join(os.path.join(directory, mount_point))
-            if not os.path.isdir(mount_dir):
-                os.makedirs(mount_dir)
-            mount_image(mount_dir, image)
-        else:
-            raise Exception("Unknown image name!")
+    for images_dict in images_dict_list:
+        for image in images:
+            img_name = os.path.basename(image)
+            if images_dict['name'] == img_name and img_name != "modules.img":
+                mount_point = images_dict['mount_point']
+                mount_dir = os.path.join(os.path.join(directory, mount_point))
+                if not os.path.isdir(mount_dir):
+                    os.makedirs(mount_dir)
+                mount_image(mount_dir, image)
 
 
-def mount_firmware(firmware_path, images_dict):
+def mount_firmware(firmware_path, images_dict_list):
     """
     Creates temporary mount points of the given firmware.
 
@@ -181,7 +181,7 @@ def mount_firmware(firmware_path, images_dict):
         logging.error("No images were found.")
         sys.exit("Error.")
     root = create_temporary_directory("root")
-    __mount_images(images, root, images_dict)
+    __mount_images(images, root, images_dict_list)
 
     return root
 

@@ -219,7 +219,7 @@ class RpmPatcher():
         self._targets = {}
         self._package_names = {}
         self._graphs = graphs
-        self.images_dict = {}
+        self.images_dict_list = {}
         self.mount_points = []
 
     def __produce_architecture_synonyms_list(self, architecture):
@@ -673,19 +673,21 @@ class RpmPatcher():
         Mount preliminary images.
         """
         kickstart_file = KickstartFile(self.kickstart_file_path)
-        self.images_dict = kickstart_file.get_images_mount_points()
+        self.images_dict_list = kickstart_file.get_images_mount_points()
         self.patching_root = temporaries.mount_firmware(self.images_directory,
-                                                        self.images_dict)
+                                                        self.images_dict_list)
 
     def __umount_root(self):
         """
         Umount preliminary images.
         """
-        if self.images_dict:
-            temporaries.umount_image(self.patching_root)
-            if "modules.img" in self.images_dict:
-                temporaries.umount_image(os.path.join(self.patching_root,
-                                                      self.images_dict["modules.img"]))
+        if not self.images_dict_list:
+            logging.debug("No mount points to umount")
+            return
+        for images_dict in reversed(self.images_dict_list):
+            mount_path = os.path.join(self.patching_root,
+                                      images_dict["mount_point"])
+            temporaries.umount_image(mount_path)
 
     def __mount_fs(self):
         """
