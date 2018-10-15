@@ -547,7 +547,8 @@ class RpmPatcher():
         global drop_patching_cache
         if drop_patching_cache:
             global patching_cache_path
-            shutil.rmtree(patching_cache_path)
+            hidden_subprocess.call("Drop patching cache", ["sudo", "rm", "-rf",
+                                   patching_cache_path])
             os.makedirs(patching_cache_path)
             return
 
