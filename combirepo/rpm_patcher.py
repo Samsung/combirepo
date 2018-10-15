@@ -167,6 +167,44 @@ def build_requirement_command(update):
     return command
 
 
+def build_subpackages_commands(path, release):
+    """
+    Builds the sed command that updates release of subpackages
+    to the proper value.
+
+    @param path                   Path to the package.
+    @param release                Package release.
+    """
+    commands = []
+    if not os.path.isfile(path):
+        logging.debug("No such file {0}".format(path))
+        return
+
+    package = os.path.basename(path)
+    package_parts = package.split('-')
+    name = '-'.join(package_parts[0:-2])
+    version = ''.join(package_parts[-2])
+    release_pattern = "\([0-9\.\+_a-z]\+\)"
+    for tag in ["Provides", "Suggests"]:
+        command = "s|^{0}:\(.*\) = {1}-{2}|{0}:\\1 = {1}-{3}|g".format(
+                  tag, version, release_pattern, release)
+        commands.append(command)
+
+    command = "s|^Requires:.*config({0}).* = {1}-{2}|Requires: config({0}) = {1}-{3}|g".format(
+              name, version, release_pattern, release)
+    commands.append(command)
+
+    command = "s|^Requires:.*{0} = {1}-{2}|Requires: {0} = {1}-{3}|g".format(
+              name, version, release_pattern, release)
+    commands.append(command)
+
+    logging.debug("Add these update commands:")
+    for cmd in commands:
+        logging.debug("    * {0}".format(cmd))
+
+    return commands
+
+
 def create_patched_packages(queue):
     """
     Patches the given package using rpmrebuild and the patching root.
@@ -481,10 +519,9 @@ class RpmPatcher():
                     command = build_requirement_command(update)
                     commands.append(command)
                 commands.append("s|^%posttrans -p *|%posttrans|g")
-                subpackages_ends = ["compat", "dbinit", "profile_tv", "profile_mobile",
-                                    "profile_wearable", "profile_ivi", "profile_common"]
-                for end in subpackages_ends:
-                    commands.append("s|{0} = \([0-9\.\+a-z]\+\)-\([0-9\.\+a-z]\+\)|{0} = \\1-{1}|g".format(end, release))
+                commands_subpackages = build_subpackages_commands(package_path, release)
+                commands.extend(commands_subpackages)
+
                 sed_command = "sed"
                 for command in commands:
                     sed_command += " -e \"{0}\"".format(command)
