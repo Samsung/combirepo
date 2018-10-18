@@ -37,7 +37,6 @@ import mic.kickstart
 from mic.utils.misc import get_pkglist_in_comps
 from dependency_graph_builder import DependencyGraphBuilder
 import temporaries
-import binfmt
 import files
 import check
 import rpm_patcher
@@ -330,6 +329,12 @@ def create_image(arch, repository_names, repository_paths, kickstart_file_path,
         mic_options.extend(["--debug", "--verbose"])
     if mic_options is not None:
         mic_command.extend(mic_options)
+    if "arm" in arch:
+        combirepo_dir = os.path.abspath(os.path.dirname(__file__))
+        qemu_executable_path = "/usr/bin/qemu-arm"
+        hidden_subprocess.call("Register {0} in binfmt_misc".format(qemu_executable_path),
+                               ["sudo", "python2", os.path.join(combirepo_dir, "binfmt.py"),
+                               "-a", arch, "-q", qemu_executable_path])
     hidden_subprocess.call("Building the image", mic_command)
 
 
@@ -425,6 +430,9 @@ def process_repository_pair(repository_pair, graphs, parameters,
         marked_packages = Set(marked_graph.vs["name"])
         for package in marked_packages:
             logging.debug("Package {0} is marked".format(package))
+        for package in parameters.package_names["excluded"]:
+            if not graph.get_name_id(package) is None:
+                marked_packages = marked_packages - Set([package])
         for package in graph.vs["name"]:
             if package not in marked_packages:
                 logging.debug("!!! Package {0} is NOT marked "
@@ -932,40 +940,6 @@ def initialize_cache_directories(output_directory_path,
     rpm_patcher.patching_cache_path = patching_cache_path
 
 
-def prepend_preload_library(library_name, output_directory_path):
-    """
-    Prepends library
-    """
-    library_paths = files.find_fast(output_directory_path,
-                                    "{0}.so.*".format(library_name))
-    library_paths_real = []
-    library_path_real = None
-    for library_path in library_paths:
-        if not os.path.islink(library_path):
-            library_paths_real.append(library_path)
-    if len(library_paths_real) > 1:
-        logging.warning("Found several libraries {0}".format(library_name))
-        for library_path in library_paths_real:
-            logging.warning(" * {0}".format(library_path))
-    elif len(library_paths_real) < 1:
-        logging.error("Found no libraries {0}".format(library_name))
-        sys.exit("Error.")
-    library_path_real = library_paths_real[0]
-    library_basename = os.path.basename(library_path_real)
-
-    root = temporaries.mount_firmware(output_directory_path)
-    ld_preload_path = os.path.join(root, "etc/ld.so.preload")
-    lines = ["{0}\n".format(library_basename)]
-    if os.path.isfile(ld_preload_path):
-        with open(ld_preload_path, "r") as ld_preload:
-            for line in ld_preload:
-                if not line.startswith(library_name):
-                    lines.append(line)
-    with open(ld_preload_path, "w") as ld_preload:
-        for line in lines:
-            ld_preload.write(line)
-
-
 def combine(parameters):
     """
     Combines the repostories based on parameters structure.
@@ -994,10 +968,8 @@ def combine(parameters):
     initialize()
     combined_repositories = construct_combined_repositories(parameters,
                                                             packages)
-    if parameters.disable_rpm_patching:
-        mic_options = ["--shrink"]
-    else:
-        mic_options = []
+    mic_options = ["--shrink"]
+
     if parameters.mic_options is list:
         mic_options.extend(parameters.mic_options)
     hidden_subprocess.visible_mode = True
@@ -1014,7 +986,3 @@ def combine(parameters):
                  mic_options,
                  parameters.package_names["service"])
     hidden_subprocess.visible_mode = False
-
-    if "libasan" in parameters.package_names["service"] and libasan_preloading:
-        images_dict = kickstart_file.get_images_mount_points()
-        prepend_preload_library("libasan", parameters.output_directory_path, images_dict)

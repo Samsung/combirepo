@@ -167,6 +167,44 @@ def build_requirement_command(update):
     return command
 
 
+def build_subpackages_commands(path, release):
+    """
+    Builds the sed command that updates release of subpackages
+    to the proper value.
+
+    @param path                   Path to the package.
+    @param release                Package release.
+    """
+    commands = []
+    if not os.path.isfile(path):
+        logging.debug("No such file {0}".format(path))
+        return
+
+    package = os.path.basename(path)
+    package_parts = package.split('-')
+    name = '-'.join(package_parts[0:-2])
+    version = ''.join(package_parts[-2])
+    release_pattern = "\([0-9\.\+_a-z]\+\)"
+    for tag in ["Provides", "Suggests"]:
+        command = "s|^{0}:\(.*\) = {1}-{2}|{0}:\\1 = {1}-{3}|g".format(
+                  tag, version, release_pattern, release)
+        commands.append(command)
+
+    command = "s|^Requires:.*config({0}).* = {1}-{2}|Requires: config({0}) = {1}-{3}|g".format(
+              name, version, release_pattern, release)
+    commands.append(command)
+
+    command = "s|^Requires:.*{0} = {1}-{2}|Requires: {0} = {1}-{3}|g".format(
+              name, version, release_pattern, release)
+    commands.append(command)
+
+    logging.debug("Add these update commands:")
+    for cmd in commands:
+        logging.debug("    * {0}".format(cmd))
+
+    return commands
+
+
 def create_patched_packages(queue):
     """
     Patches the given package using rpmrebuild and the patching root.
@@ -181,15 +219,12 @@ def create_patched_packages(queue):
         return
 
     logging.debug("Chrooting to {0}".format(root))
-    dev_null_path = os.path.join(root, "dev/null")
-    hidden_subprocess.call("Mount devtmpfs",
-                           ["sudo", "mount", "-o", "bind", "/dev/null", dev_null_path])
     make_command = ["sudo", "chroot", root, "bash", "-c",
                     """chmod a+x /usr/bin/*;
+                       rm -f /var/lib/rpm/__db.*;
                        make --silent"""]
     hidden_subprocess.call("Start rpm patching", make_command)
-    hidden_subprocess.call("Umount devtmpfs",
-                           ["sudo", "umount", dev_null_path])
+
     logging.debug("Exiting from {0}".format(root))
     queue.task_done()
 
@@ -222,6 +257,8 @@ class RpmPatcher():
         self._targets = {}
         self._package_names = {}
         self._graphs = graphs
+        self.images_dict_list = {}
+        self.mount_points = []
 
     def __produce_architecture_synonyms_list(self, architecture):
         """
@@ -308,10 +345,10 @@ class RpmPatcher():
             qemu_name = "^qemu-{0}$".format(arch)
             qemu_binfmt_name = "^qemu-{0}-binfmt$".format(arch)
             executables_portion = files.find_fast(self.patching_root,
-                                                  qemu_name)
+                                                  qemu_binfmt_name)
             executables.extend(executables_portion)
             executables_portion = files.find_fast(self.patching_root,
-                                                  qemu_binfmt_name)
+                                                  qemu_name)
             executables.extend(executables_portion)
 
         logging.warning("Found several qemu executables:")
@@ -376,11 +413,9 @@ class RpmPatcher():
         if developer_disable_patching:
             logging.debug("RPM patcher will not be prepared.")
             return
-        kickstart_file = KickstartFile(self.kickstart_file_path)
-        images_dict = kickstart_file.get_images_mount_points()
         graphs = self._graphs
         self.__prepare_image(graphs)
-        self.patching_root = temporaries.mount_firmware(self.images_directory, images_dict)
+        self.__mount_root()
         host_arch = platform.machine()
         host_arches = self.__produce_architecture_synonyms_list(host_arch)
         if self.architecture not in host_arches:
@@ -483,6 +518,10 @@ class RpmPatcher():
                 for update in updates:
                     command = build_requirement_command(update)
                     commands.append(command)
+                commands.append("s|^%posttrans -p *|%posttrans|g")
+                commands_subpackages = build_subpackages_commands(package_path, release)
+                commands.extend(commands_subpackages)
+
                 sed_command = "sed"
                 for command in commands:
                     sed_command += " -e \"{0}\"".format(command)
@@ -545,7 +584,8 @@ class RpmPatcher():
         global drop_patching_cache
         if drop_patching_cache:
             global patching_cache_path
-            shutil.rmtree(patching_cache_path)
+            hidden_subprocess.call("Drop patching cache", ["sudo", "rm", "-rf",
+                                   patching_cache_path])
             os.makedirs(patching_cache_path)
             return
 
@@ -666,15 +706,44 @@ class RpmPatcher():
             hidden_subprocess.call("Copying to repo",
                                    ["sudo", "cp", path, target])
 
+    def __mount_root(self):
+        """
+        Mount preliminary images.
+        """
+        kickstart_file = KickstartFile(self.kickstart_file_path)
+        self.images_dict_list = kickstart_file.get_images_mount_points()
+        self.patching_root = temporaries.mount_firmware(self.images_directory,
+                                                        self.images_dict_list)
+
     def __umount_root(self):
         """
         Umount preliminary images.
         """
-        kickstart_file = KickstartFile(self.kickstart_file_path)
-        images_dict = kickstart_file.get_images_mount_points()
-        temporaries.umount_image(self.patching_root)
-        if "modules.img" in images_dict:
-            temporaries.umount_image(os.path.join(self.patching_root, images_dict["modules.img"]))
+        if not self.images_dict_list:
+            logging.debug("No mount points to umount")
+            return
+        for images_dict in reversed(self.images_dict_list):
+            mount_path = os.path.join(self.patching_root,
+                                      images_dict["mount_point"])
+            temporaries.umount_image(mount_path)
+
+    def __mount_fs(self):
+        """
+        Mount system directories required for patching.
+        """
+        self.mount_points = ["sys", "proc", "dev", "dev/pts", "dev/null",
+                             "/dev/mqueue", "/dev/shm"]
+        for root in self.patching_root_clones:
+            for mount_point in self.mount_points:
+                temporaries.mount_bind(root, mount_point)
+
+    def __umount_fs(self):
+        """
+        Umount system directories required for patching.
+        """
+        for root in self.patching_root_clones:
+            for mount_point in reversed(self.mount_points):
+                temporaries.umount_image(os.path.join(root, mount_point))
 
     def __use_cached_root_or_prepare(self):
         """
@@ -730,12 +799,14 @@ class RpmPatcher():
             if len(self._tasks) > 0:
                 self.__use_cached_root_or_prepare()
                 self.__clone_chroots()
+                self.__umount_root()
+                self.__mount_fs()
                 self.__deploy_packages()
                 hidden_subprocess.function_call_monitor(
                     self.__patch_packages, (), self._status_callback)
                 self.__postprocess_cache()
                 self.__process_results()
-                self.__umount_root()
+                self.__umount_fs()
 
     def __prepare_image(self, graphs):
         """

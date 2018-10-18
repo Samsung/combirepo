@@ -30,6 +30,18 @@ import files
 debug_mode = False
 default_directory = None
 
+def __umask_temporary_file(path, mode):
+    """
+    Changes mode of temporary file or directory:
+
+    @param path    Path to the file.
+    @param mode    New file mode.
+    """
+    umask = os.umask(0)
+    os.chmod(path, mode)
+    os.umask(umask)
+
+
 def create_temporary_file(file_suffix):
     """
     Creates temporary file in tmpfs, named as follows:
@@ -43,10 +55,12 @@ def create_temporary_file(file_suffix):
     global default_directory
     if not os.path.isdir(default_directory):
         os.makedirs(default_directory)
+        __umask_temporary_file(default_directory, 0777)
     file_descriptor, path = tempfile.mkstemp(prefix='combirepo.',
                                              suffix="." + file_suffix,
                                              dir=default_directory)
     os.close(file_descriptor)  # This helps to avoid the file descriptor leak.
+    __umask_temporary_file(path, 0666)
     if not debug_mode:
         atexit.register(os.remove, path)  # It will be removed at exit.
     logging.debug("Created temporary file {0}".format(path))
@@ -66,9 +80,11 @@ def create_temporary_directory(directory_suffix):
     global default_directory
     if not os.path.isdir(default_directory):
         os.makedirs(default_directory)
+        __umask_temporary_file(default_directory, 0777)
     path = tempfile.mkdtemp(prefix='combirepo.',
                             suffix="." + directory_suffix,
                             dir=default_directory)
+    __umask_temporary_file(path, 0777)
     if not debug_mode:
         atexit.register(shutil.rmtree, path)  # It will be removed at exit.
     logging.debug("Created temporary file {0}".format(path))
@@ -106,11 +122,12 @@ def umount_image(directory):
 
     @param directory        The path to the directory.
     """
-    value = subprocess.call(["sudo", "umount", "-l", directory])
-    if value != 0:
-        logging.error("Failed to umount image.")
-        sys.exit("Error.")
-    logging.debug("Umounted {0}".format(directory))
+    if os.path.ismount(directory):
+        value = subprocess.call(["sudo", "umount", "-l", directory])
+        if value != 0:
+            logging.error("Failed to umount image.")
+            sys.exit("Error.")
+        logging.debug("Umounted {0}".format(directory))
     return
 
 
@@ -132,7 +149,7 @@ def __find_platform_images(images_directory):
     return images
 
 
-def __mount_images(images, directory, images_dict):
+def __mount_images(images, directory, images_dict_list):
     """
     Mounts the images (rootfs, system-data, user and etc) to the given
     directory.
@@ -140,19 +157,18 @@ def __mount_images(images, directory, images_dict):
     @param images       The list of paths to images.
     @param directory    The mount directory.
     """
-    for image in images:
-        img_name = os.path.basename(image)
-        if img_name in images_dict:
-            mount_point = images_dict[img_name]
-            mount_dir = os.path.join(os.path.join(directory, mount_point))
-            if not os.path.isdir(mount_dir):
-                os.makedirs(mount_dir)
-            mount_image(mount_dir, image)
-        else:
-            raise Exception("Unknown image name!")
+    for images_dict in images_dict_list:
+        for image in images:
+            img_name = os.path.basename(image)
+            if images_dict['name'] == img_name and img_name != "modules.img":
+                mount_point = images_dict['mount_point']
+                mount_dir = os.path.join(os.path.join(directory, mount_point))
+                if not os.path.isdir(mount_dir):
+                    os.makedirs(mount_dir)
+                mount_image(mount_dir, image)
 
 
-def mount_firmware(firmware_path, images_dict):
+def mount_firmware(firmware_path, images_dict_list):
     """
     Creates temporary mount points of the given firmware.
 
@@ -165,6 +181,22 @@ def mount_firmware(firmware_path, images_dict):
         logging.error("No images were found.")
         sys.exit("Error.")
     root = create_temporary_directory("root")
-    __mount_images(images, root, images_dict)
+    __mount_images(images, root, images_dict_list)
 
     return root
+
+
+def mount_bind(root, mount_point):
+    """
+    Bind mount directory.
+
+    @param root           The path to the root.
+    @param mount_point    Directory to mount.
+
+    """
+    logging.debug("Bind mount {0}".format(mount_point))
+    value = subprocess.call(["sudo", "mount", "--bind", "/" + mount_point,
+                             os.path.join(root, mount_point)])
+    if value != 0:
+        logging.error("Failed to mount {0}.".format(mount_point))
+        sys.exit("Error.")

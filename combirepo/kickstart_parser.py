@@ -22,6 +22,7 @@ import os
 import shutil
 import re
 import logging
+from operator import itemgetter
 
 
 class KickstartFile():
@@ -54,17 +55,27 @@ class KickstartFile():
         that are mentioned in the kickstart file.
         """
         with open(self.path, "r") as kickstart_file:
-            images_dict = {}
+            images_dict_list = []
             for line in kickstart_file:
                 if line.startswith("part /"):
                     image = re.findall(r"--label=(\S+)", line)
                     mount_point = re.findall(r"/(\S*)", line)
                     if image and mount_point:
-                        images_dict.update([(image[0] + '.img', mount_point[0])])
+                        depth = 0
+                        if mount_point[0]:
+                            mount_path = os.path.normpath(mount_point[0]).strip('/')
+                            depth = len(mount_path.split('/'))
+                        images_dict_list.append({'name':  image[0] + '.img',
+                                                 'mount_point': mount_point[0],
+                                                 'depth': depth})
                     else:
                         logging.warning("Could not find image info in {0}".format(line))
-            logging.debug("Found theese images: {0}".format(images_dict))
-            return images_dict
+            sorted_images_dict_list = []
+            if len(images_dict_list):
+                sorted_images_dict_list = sorted(images_dict_list, key=itemgetter('depth'))
+            logging.debug("Found these images: {0}".format(sorted_images_dict_list))
+
+            return sorted_images_dict_list
 
     def replace_repository_paths(self, repository_names, repository_paths):
         """

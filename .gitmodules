@@ -1,4 +1,4 @@
 [submodule "combirepo/rpmrebuild"]
 	path = rpmrebuild
 	url = https://git.code.sf.net/p/rpmrebuild/git
-	revision = .
+	branch = v2.12
