@@ -79,7 +79,7 @@ pipeline {
     )
     string(
       name: 'CACHEDIR',
-      defaultValue: './tmp',
+      defaultValue: 'tmp',
       description:
         """
         Path to cache directory for the tool.
@@ -87,7 +87,7 @@ pipeline {
     )
     string(
       name: 'OUTDIR',
-      defaultValue: './mic-output',
+      defaultValue: 'mic-output',
       description:
         """
         Output directory for MIC.
@@ -180,10 +180,10 @@ pipeline {
     stage('Parameters initialization') {
       steps {
         script {
-          ksFile = "./local.ks"
-          logFile = "./local.log"
-          pkgFile = "./local.packages"
-          micFile = "./jenkins/mic.conf"
+          ksFile = "local.ks"
+          logFile = "local.log"
+          pkgFile = "local.packages"
+          micFile = "jenkins/mic.conf"
           micDir = params.OUTDIR
           cacheDir = params.CACHEDIR
         }
@@ -278,7 +278,6 @@ pipeline {
           }
 
           sh """
-          ./setup.py build
           if ! ${params.DISABLE_RPM_PATCHING}; then
               ./setup.py sdist
           fi
@@ -331,6 +330,10 @@ pipeline {
     }
     success {
         echo 'Successfully!'
+        archiveArtifacts artifacts: "${ksFile}"
+        archiveArtifacts artifacts: "${pkgFile}"
+        archiveArtifacts artifacts: "${logFile}"
+        archiveArtifacts artifacts: "${micDir}/*"
     }
     failure {
         echo 'Failed!'
