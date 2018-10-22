@@ -146,14 +146,11 @@ class KickstartFile():
                     if line.startswith("%end"):
                         if_packages_section = False
                         lines.append(line)
-                    elif line.startswith("@"):
-                        lines.append("#{0}".format(line))
-                        logging.debug("Added line #{0}".format(line))
-                    else:
-                        lines.append(line)
                 elif line.startswith("%packages"):
                     if_packages_section = True
                     lines.append(line)
+                elif line.startswith("%post"):
+                    break
                 else:
                     lines.append(line)
 
