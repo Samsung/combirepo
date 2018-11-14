@@ -109,9 +109,9 @@ def urlopen(url):
         request = urllib2.Request(url)
         request.add_header("Authorization",
                            "Basic {0}".format(common_authenticator))
-        response = urllib2.urlopen(request, timeout=30)
+        response = urllib2.urlopen(request, timeout=60)
     else:
-        response = urllib2.urlopen(url, timeout=30)
+        response = urllib2.urlopen(url, timeout=60)
     logging.debug("\nOpening {0} -> done\n".format(url))
     return response
 
