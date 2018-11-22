@@ -77,7 +77,7 @@ def prepare_minimal_packages_list(graphs):
     @param graphs           The list of dependency graphs of repositories.
     @return                 The list of packages.
     """
-    symbols = ["useradd", "mkdir", "awk", "cpio", "make", "rpmbuild", "sed"]
+    symbols = ["useradd", "mkdir", "awk", "cpio", "make", "rpmbuild", "sed", "grep"]
     deprecated_substrings = ["mic-bootstrap", "x86", "x64"]
     providers = {}
     for symbol in symbols:
@@ -514,10 +514,14 @@ class RpmPatcher():
                 makefile.write("{0}: {1}\n".format(
                     package_name, package_file_name))
                 commands = []
-                commands.append("s/^Release:.*/Release: {0}/g".format(release))
                 for update in updates:
                     command = build_requirement_command(update)
                     commands.append(command)
+                # skip %buildroot files in spec
+                commands.append("/\.build-id/d")
+                # skip basic.target.wants files in spec
+                commands.append("/basic\.target\.wants/d")
+                # remove -p option from %posttrans
                 commands.append("s|^%posttrans -p *|%posttrans|g")
                 commands_subpackages = build_subpackages_commands(package_path, release)
                 commands.extend(commands_subpackages)
@@ -525,14 +529,15 @@ class RpmPatcher():
                 sed_command = "sed"
                 for command in commands:
                     sed_command += " -e \"{0}\"".format(command)
-                makefile.write("\trpmrebuild -f \'{0}\' -p -n -d "
+                makefile.write("\trpmrebuild -f \'{0}\' --release={1} -p -n -d "
                                "/rpmrebuild_results "
-                               "{1}".format(sed_command,
+                               "{2}".format(sed_command,
+                                            release,
                                             package_file_name))
                 if logging.getLogger().getEffectiveLevel() != logging.DEBUG:
                     makefile.write(" >/dev/null 2>/dev/null")
                 makefile.write(" ; \\\n")
-                makefile.write("\trm -rf /home/*\n")
+            makefile.write("rm -rf /home/*\n")
 
         if logging.getLogger().getEffectiveLevel() == logging.DEBUG:
             subprocess.call(["cat", makefile_path])
