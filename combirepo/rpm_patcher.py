@@ -755,6 +755,7 @@ class RpmPatcher():
         cached_images_info_paths = files.find_fast(
             patching_cache_path, ".*preliminary_image.info.txt")
         matching_images_path = None
+        self.__prepare()
         for info_path in cached_images_info_paths:
             cached_images_path = info_path.replace(".info.txt", "")
             if not os.path.isdir(cached_images_path):
@@ -773,7 +774,6 @@ class RpmPatcher():
             logging.info("Found already prepared patching root: "
                          "{0}".format(matching_images_path))
         else:
-            self.__prepare()
             cached_chroot_path = os.path.join(
             patching_cache_path, os.path.basename(
                 self.patching_root) + "preliminary_image")
