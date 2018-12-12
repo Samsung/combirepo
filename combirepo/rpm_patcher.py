@@ -77,7 +77,7 @@ def prepare_minimal_packages_list(graphs):
     @param graphs           The list of dependency graphs of repositories.
     @return                 The list of packages.
     """
-    symbols = ["useradd", "mkdir", "awk", "cpio", "make", "rpmbuild", "sed"]
+    symbols = ["useradd", "mkdir", "awk", "cpio", "make", "rpmbuild", "sed", "grep"]
     deprecated_substrings = ["mic-bootstrap", "x86", "x64"]
     providers = {}
     for symbol in symbols:
@@ -185,18 +185,10 @@ def build_subpackages_commands(path, release):
     name = '-'.join(package_parts[0:-2])
     version = ''.join(package_parts[-2])
     release_pattern = "\([0-9\.\+_a-z]\+\)"
-    for tag in ["Provides", "Suggests"]:
-        command = "s|^{0}:\(.*\) = {1}-{2}|{0}:\\1 = {1}-{3}|g".format(
+    for tag in ["provides", "suggests", "requires"]:
+        command = "--change-spec-{0}=\'sed -e \"s/ = {1}-{2}/ = {1}-{3}/g\"\'".format(
                   tag, version, release_pattern, release)
         commands.append(command)
-
-    command = "s|^Requires:.*config({0}).* = {1}-{2}|Requires: config({0}) = {1}-{3}|g".format(
-              name, version, release_pattern, release)
-    commands.append(command)
-
-    command = "s|^Requires:.*{0} = {1}-{2}|Requires: {0} = {1}-{3}|g".format(
-              name, version, release_pattern, release)
-    commands.append(command)
 
     logging.debug("Add these update commands:")
     for cmd in commands:
@@ -513,26 +505,33 @@ class RpmPatcher():
                 makefile.write("\n")
                 makefile.write("{0}: {1}\n".format(
                     package_name, package_file_name))
-                commands = []
-                commands.append("s/^Release:.*/Release: {0}/g".format(release))
-                for update in updates:
-                    command = build_requirement_command(update)
-                    commands.append(command)
-                commands.append("s|^%posttrans -p *|%posttrans|g")
+                sed_command = ""
+                if (updates):
+                    sed_command = "-f \'sed"
+                    for update in updates:
+                        command = build_requirement_command(update)
+                        sed_command += " -e \"{0}\"".format(command)
+                    sed_command += "\'"
+                spec_commands = []
+                # skip %buildroot and basic.target.wants files in spec
+                spec_commands.append("--change-spec-files=\'sed -e \"/\.build-id/d\" -e \"/basic\.target\.wants/d\"\'")
+                # remove -p option from %posttrans
+                spec_commands.append("--change-spec-posttrans=\'sed -e \"s/-p .*//g\"\'")
                 commands_subpackages = build_subpackages_commands(package_path, release)
-                commands.extend(commands_subpackages)
-
-                sed_command = "sed"
-                for command in commands:
-                    sed_command += " -e \"{0}\"".format(command)
-                makefile.write("\trpmrebuild -f \'{0}\' -p -n -d "
+                spec_commands.extend(commands_subpackages)
+                spec_command = ""
+                for command in spec_commands:
+                    spec_command += (" " + command)
+                makefile.write("\trpmrebuild {0} {1} --release={2} -p -n -d "
                                "/rpmrebuild_results "
-                               "{1}".format(sed_command,
+                               "{3}".format(spec_command,
+                                            sed_command,
+                                            release,
                                             package_file_name))
                 if logging.getLogger().getEffectiveLevel() != logging.DEBUG:
                     makefile.write(" >/dev/null 2>/dev/null")
-                makefile.write(" ; \\\n")
-                makefile.write("\trm -rf /home/*\n")
+                makefile.write("\n")
+            makefile.write("\nall:\n\trm -rf /home/*\n")
 
         if logging.getLogger().getEffectiveLevel() == logging.DEBUG:
             subprocess.call(["cat", makefile_path])
@@ -756,6 +755,7 @@ class RpmPatcher():
         cached_images_info_paths = files.find_fast(
             patching_cache_path, ".*preliminary_image.info.txt")
         matching_images_path = None
+        self.__prepare()
         for info_path in cached_images_info_paths:
             cached_images_path = info_path.replace(".info.txt", "")
             if not os.path.isdir(cached_images_path):
@@ -774,7 +774,6 @@ class RpmPatcher():
             logging.info("Found already prepared patching root: "
                          "{0}".format(matching_images_path))
         else:
-            self.__prepare()
             cached_chroot_path = os.path.join(
             patching_cache_path, os.path.basename(
                 self.patching_root) + "preliminary_image")
