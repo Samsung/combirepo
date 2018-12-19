@@ -243,9 +243,8 @@ pipeline {
                   }
                 }
                 if (!flag) {
-                  println "Error: " + pkg + " is not found in the packages list!"
-                  println "Error: " + name + " list is corrupted!"
-                  return 1
+                  println "Warning: " + pkg + " is not found in the packages list!"
+                  println "Warning: " + name + " list is corrupted!"
                 }
               }
             }
