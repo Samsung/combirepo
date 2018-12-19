@@ -48,6 +48,7 @@ class RepositoryCombinerParameters(object):
         self._password = None
         self._temporary_directory_path = None
         self._sup_repo_url = None
+        self._package_groups = []
         self._package_names = {}
         self._repository_pairs = []
         self._architecture = None
@@ -131,6 +132,26 @@ class RepositoryCombinerParameters(object):
     @sup_repo_url.deleter
     def sup_repo_url(self):
         del self._sup_repo_url
+
+    @property
+    def package_groups(self):
+        """
+        The names of package groups that must be treated specially
+        """
+        return self._package_groups
+
+    @package_groups.setter
+    def package_groups(self, package_groups):
+        if not isinstance(package_groups, list):
+            logging.warning("Argument package_groups is not a list!")
+            return
+        for package_group in package_groups:
+            check.valid_ascii_string(package_group)
+        self._package_groups = package_groups
+
+    @package_groups.deleter
+    def package_groups(self):
+        del self._package_groups
 
     @property
     def package_names(self):
@@ -340,6 +361,11 @@ class RepositoryCombinerParameters(object):
             self._password = parameters.password
         elif parameters.password is not None:
             self.__warn_about_merging_strategy(parameters.password)
+
+        if len(self._package_groups) == 0:
+            self._package_groups = parameters.package_groups
+        elif len(parameters.package_groups) > 0:
+            self.__warn_about_merging_strategy(parameters.package_groups)
 
         if len(self._package_names.keys()) == 0:
             self._package_names = parameters.package_names
