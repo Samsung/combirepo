@@ -133,7 +133,7 @@ class CommandlineParser():
             "prefered in case of \"have choice\" problem.")
         self._parser.add_argument(
             "-G", "--package-groups", action="append", type=str,
-            dest="package_groups", help="The name of package group that should "
+            dest="package_groups", help="The id of package group that should "
             "be marked.")
         self._parser.add_argument(
             "--packages-file", action="store", type=str,
