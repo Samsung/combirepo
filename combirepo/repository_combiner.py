@@ -32,6 +32,7 @@ import hidden_subprocess
 import multiprocessing
 import base64
 import difflib
+import xml.etree.ElementTree as ET
 from rpmUtils.miscutils import splitFilename
 import mic.kickstart
 from mic.utils.misc import get_pkglist_in_comps
@@ -797,14 +798,36 @@ def prepare_repositories(parameters):
     return kickstart_file_path
 
 
-def resolve_groups(repositories, kickstart_file_path):
+def parse_groups_file(groups_path, package_groups):
+    """
+    Resolves packages from groups list.
+
+    @param groups_path          The groups.xml file path.
+    @param package_groups       The list of groups to mark.
+    @return                     The set of package names to mark.
+    """
+    logging.debug("Looking for packages of these groups:")
+    groups_packages = set()
+    root = ET.parse(groups_path).getroot()
+    for group in root.findall('group'):
+        group_id = group.find('id').text
+        if group_id in package_groups:
+            logging.debug(" * {0}".format(group_id))
+            for pkg in group.iter('packagereq'):
+                groups_packages.add(pkg.text)
+                logging.debug("     # {0}".format(pkg.text))
+    return groups_packages
+
+
+def resolve_groups(repositories, parameters):
     """
     Resolves packages groups from kickstart file.
 
     @param repositories         The list of original repository URLs.
-    @param kickstart_file_path  The path to the kickstart file.
+    @param parameters           The combirepo run-time parameters.
     @return                     The list of package names.
     """
+    kickstart_file_path = parameters.kickstart_file_path
     groups_paths = []
     for url in repositories:
         repository = Repository(url)
@@ -816,25 +839,20 @@ def resolve_groups(repositories, kickstart_file_path):
                 groups_file.writelines(groups_data)
             groups_paths.append(groups_path)
     logging.debug("Following groups files prepared:")
+    groups_packages = set()
     for groups_path in groups_paths:
         logging.debug(" * {0}".format(groups_path))
+        groups_packages.update(parse_groups_file(groups_path, parameters.package_groups))
     try:
         parser = mic.kickstart.read_kickstart(kickstart_file_path)
-        groups = mic.kickstart.get_groups(parser)
         packages = set(mic.kickstart.get_packages(parser))
+        groups_packages = groups_packages.intersection(parameters.packages_list)
+        for pkg in groups_packages:
+            parameters.package_names["single"].add(pkg)
     except mic.utils.errors.KsError as err:
         logging.error("Failed to read kickstart file:")
         logging.error(str(err))
         sys.exit("Error.")
-
-    for group in groups:
-        group_pkgs = [
-            pkg
-            for path in groups_paths
-            for pkg in get_pkglist_in_comps(group.name, path)
-        ]
-        logging.debug("Group {0} contains {1} packages.".format(group.name, len(group_pkgs)))
-        packages.update(group_pkgs)
 
     return list(packages)
 
@@ -959,7 +977,7 @@ def combine(parameters):
     logging.debug("Original repository URLs: "
                   "{0}".format(original_repositories))
     packages = resolve_groups(original_repositories,
-                              parameters.kickstart_file_path)
+                              parameters)
     logging.debug("Packages:")
     for package in packages:
         logging.debug(" * {0}".format(package))

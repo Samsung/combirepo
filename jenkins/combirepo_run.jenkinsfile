@@ -158,6 +158,14 @@ pipeline {
         "have choice" problem.
         """
     )
+    text(
+      name: 'GROUPS',
+      defaultValue: '',
+      description:
+        """
+        The list of package groups id that should be marked.
+        """
+    )
   }
 
   stages {
@@ -243,9 +251,8 @@ pipeline {
                   }
                 }
                 if (!flag) {
-                  println "Error: " + pkg + " is not found in the packages list!"
-                  println "Error: " + name + " list is corrupted!"
-                  return 1
+                  println "Warning: " + pkg + " is not found in the packages list!"
+                  println "Warning: " + name + " list is corrupted!"
                 }
               }
             }
@@ -307,6 +314,7 @@ pipeline {
           if [ ! -z ${params.SINGLE} ]; then single="-s ${params.SINGLE}"; else single=""; fi
           if [ ! -z ${params.EXCLUDE} ]; then exclude="-e ${params.EXCLUDE}"; else exclude=""; fi
           if [ ! -z ${params.PREFERABLE} ]; then preferable="-p ${params.PREFERABLE}"; else preferable=""; fi
+          if [ ! -z ${params.GROUPS} ]; then groups="-G ${params.GROUPS}"; else groups=""; fi
 
           mkdir -p ${micDir}
           mkdir -p ${cacheDir}
@@ -316,7 +324,7 @@ pipeline {
           \${greedy} \${mirror} \${rpm_patching} \${debug} \${verbose} \
           --regenerate-repodata --preferring-strategy big --skip-version-mismatch --mic-config ${micFile} \
           -S asan-runtime-env \
-          \${forward} \${backward} \${single} \${exclude} \${preferable} \
+          \${forward} \${backward} \${single} \${exclude} \${preferable} \${groups} \
           ${unified_repo_name} \${unified_repo} \${unified_asan_repo} \
           base-standard \${base_repo} \${base_asan_repo}
           """

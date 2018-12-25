@@ -132,6 +132,10 @@ class CommandlineParser():
             dest="preferable", help="The name of package that should be "
             "prefered in case of \"have choice\" problem.")
         self._parser.add_argument(
+            "-G", "--package-groups", action="append", type=str,
+            dest="package_groups", help="The id of package group that should "
+            "be marked.")
+        self._parser.add_argument(
             "--packages-file", action="store", type=str,
             dest="packages_file", help="The file containing list of snapshot packages "
             "that should be downloaded from repositories.")
@@ -363,7 +367,7 @@ class CommandlineParser():
                 for package in pkg_file:
                     packages_list.append(package.strip())
         packages_list.extend(["mic-bootstrap-x86-arm", "libasan",
-                             "asan-runtime-env"])
+                             "asan-runtime-env", "package-groups"])
         if not disable_rpm_patching:
             deps = ["binutils", "bzip2", "cpio", "gcc", "glibc-devel",
                     "libatomic", "libcc1", "libitm", "libubsan",
@@ -372,6 +376,16 @@ class CommandlineParser():
                     "qemu-linux-user-x86_64-cross"]
             packages_list.extend(deps)
         return packages_list
+
+    def __build_package_groups(self, arguments):
+        """
+        Processes parsed package-groups option.
+
+        @param arguments        The parsed arguments.
+        @return                 The list of package groups.
+        """
+        package_groups = split_names_list(arguments.package_groups)
+        return package_groups
 
     def __build_package_names(self, arguments):
         """
@@ -427,6 +441,8 @@ class CommandlineParser():
                 splitted_options.extend(re.split("[\ \n\t]", option))
             parameters.mic_options = splitted_options
 
+        package_groups = self.__build_package_groups(arguments)
+        parameters.package_groups = package_groups
         package_names = self.__build_package_names(arguments)
         parameters.package_names = package_names
 
