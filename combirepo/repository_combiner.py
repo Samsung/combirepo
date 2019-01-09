@@ -848,7 +848,7 @@ def resolve_groups(repositories, parameters):
         packages = set(mic.kickstart.get_packages(parser))
         groups_packages = groups_packages.intersection(parameters.packages_list)
         for pkg in groups_packages:
-            parameters.package_names["single"].add(pkg)
+            parameters.package_names["backward"].add(pkg)
     except mic.utils.errors.KsError as err:
         logging.error("Failed to read kickstart file:")
         logging.error(str(err))
