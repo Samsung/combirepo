@@ -70,14 +70,6 @@ pipeline {
         """
     )
     string(
-      name: 'RPMREBUILD_PATH',
-      defaultValue: 'https://git.code.sf.net/p/rpmrebuild/git',
-      description:
-        """
-        Path to rpmrebuild directory.
-        """
-    )
-    string(
       name: 'CACHEDIR',
       defaultValue: 'tmp',
       description:
@@ -173,16 +165,6 @@ pipeline {
       steps {
         cleanWs()
         checkout scm
-        script {
-          if (!params.DISABLE_RPM_PATCHING) {
-            sh """
-            git rm rpmrebuild
-            git submodule add ${params.RPMREBUILD_PATH} rpmrebuild
-            git submodule init
-            git submodule update
-            """
-          }
-        }
       }
     }
     stage('Parameters initialization') {
