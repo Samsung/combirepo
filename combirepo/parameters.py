@@ -48,7 +48,7 @@ class RepositoryCombinerParameters(object):
         self._password = None
         self._temporary_directory_path = None
         self._sup_repo_url = None
-        self._package_groups = []
+        self._package_groups = {}
         self._package_names = {}
         self._repository_pairs = []
         self._architecture = None
@@ -142,11 +142,14 @@ class RepositoryCombinerParameters(object):
 
     @package_groups.setter
     def package_groups(self, package_groups):
-        if not isinstance(package_groups, list):
-            logging.warning("Argument package_groups is not a list!")
+        if not isinstance(package_groups, dict):
+            logging.warning("Argument package_groups is not a dictionary!")
             return
-        for package_group in package_groups:
-            check.valid_ascii_string(package_group)
+        for key in package_groups.keys():
+            if not isinstance(package_groups[key], list):
+                continue
+            for package_group in package_groups[key]:
+                check.valid_ascii_string(package_group)
         self._package_groups = package_groups
 
     @package_groups.deleter

@@ -809,13 +809,14 @@ def parse_groups_file(groups_path, package_groups):
     logging.debug("Looking for packages of these groups:")
     groups_packages = set()
     root = ET.parse(groups_path).getroot()
-    for group in root.findall('group'):
-        group_id = group.find('id').text
-        if group_id in package_groups:
-            logging.debug(" * {0}".format(group_id))
-            for pkg in group.iter('packagereq'):
-                groups_packages.add(pkg.text)
-                logging.debug("     # {0}".format(pkg.text))
+    if package_groups:
+        for group in root.findall('group'):
+            group_id = group.find('id').text
+            if group_id in package_groups:
+                logging.debug(" * {0}".format(group_id))
+                for pkg in group.iter('packagereq'):
+                    groups_packages.add(pkg.text)
+                    logging.debug("     # {0}".format(pkg.text))
     return groups_packages
 
 
@@ -839,15 +840,28 @@ def resolve_groups(repositories, parameters):
                 groups_file.writelines(groups_data)
             groups_paths.append(groups_path)
     logging.debug("Following groups files prepared:")
-    groups_packages = set()
+    groups_single = set()
+    groups_forward = set()
+    groups_backward = set()
     for groups_path in groups_paths:
         logging.debug(" * {0}".format(groups_path))
-        groups_packages.update(parse_groups_file(groups_path, parameters.package_groups))
+        groups_single.update(parse_groups_file(groups_path,
+                               parameters.package_groups["single"]))
+        groups_forward.update(parse_groups_file(groups_path,
+                              parameters.package_groups["forward"]))
+        groups_backward.update(parse_groups_file(groups_path,
+                               parameters.package_groups["backward"]))
     try:
         parser = mic.kickstart.read_kickstart(kickstart_file_path)
         packages = set(mic.kickstart.get_packages(parser))
-        groups_packages = groups_packages.intersection(parameters.packages_list)
-        for pkg in groups_packages:
+        groups_single = groups_single.intersection(parameters.packages_list)
+        for pkg in groups_single:
+            parameters.package_names["single"].add(pkg)
+        groups_forward = groups_forward.intersection(parameters.packages_list)
+        for pkg in groups_forward:
+            parameters.package_names["forward"].add(pkg)
+        groups_backward = groups_backward.intersection(parameters.packages_list)
+        for pkg in groups_backward:
             parameters.package_names["backward"].add(pkg)
     except mic.utils.errors.KsError as err:
         logging.error("Failed to read kickstart file:")
