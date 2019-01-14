@@ -151,7 +151,7 @@ pipeline {
         """
     )
     text(
-      name: 'GROUPS-SINGLE',
+      name: 'GROUPS_SINGLE',
       defaultValue: '',
       description:
         """
@@ -159,7 +159,7 @@ pipeline {
         """
     )
     text(
-      name: 'GROUPS-FORWARD',
+      name: 'GROUPS_FORWARD',
       defaultValue: '',
       description:
         """
@@ -167,7 +167,7 @@ pipeline {
         """
     )
     text(
-      name: 'GROUPS-BACKWARD',
+      name: 'GROUPS_BACKWARD',
       defaultValue: '',
       description:
         """
@@ -312,9 +312,9 @@ pipeline {
           if [ ! -z ${params.SINGLE} ]; then single="-s ${params.SINGLE}"; else single=""; fi
           if [ ! -z ${params.EXCLUDE} ]; then exclude="-e ${params.EXCLUDE}"; else exclude=""; fi
           if [ ! -z ${params.PREFERABLE} ]; then preferable="-p ${params.PREFERABLE}"; else preferable=""; fi
-          if [ ! -z ${params.GROUPS-SINGLE} ]; then groups-single="--groups-single ${params.GROUPS-SINGLE}"; else groups-single=""; fi
-          if [ ! -z ${params.GROUPS-FORWARD} ]; then groups-forward="--groups-forward ${params.GROUPS-FORWARD}"; else groups-forward=""; fi
-          if [ ! -z ${params.GROUPS-BACKWARD} ]; then groups-backward="--groups-backward ${params.GROUPS-BACKWARD}"; else groups-backward=""; fi
+          if [ ! -z ${params.GROUPS_SINGLE} ]; then groups_single="--groups-single ${params.GROUPS_SINGLE}"; else groups_single=""; fi
+          if [ ! -z ${params.GROUPS_FORWARD} ]; then groups_forward="--groups-forward ${params.GROUPS_FORWARD}"; else groups_forward=""; fi
+          if [ ! -z ${params.GROUPS_BACKWARD} ]; then groups_backward="--groups-backward ${params.GROUPS_BACKWARD}"; else groups_backward=""; fi
 
           mkdir -p ${micDir}
           mkdir -p ${cacheDir}
@@ -325,7 +325,7 @@ pipeline {
           --regenerate-repodata --preferring-strategy big --skip-version-mismatch --mic-config ${micFile} \
           -S asan-runtime-env \
           \${forward} \${backward} \${single} \${exclude} \${preferable} \
-          \${groups-single} \${groups-forward} \${groups-backward} \
+          \${groups_single} \${groups_forward} \${groups_backward} \
           ${unified_repo_name} \${unified_repo} \${unified_asan_repo} \
           base-standard \${base_repo} \${base_asan_repo}
           """
