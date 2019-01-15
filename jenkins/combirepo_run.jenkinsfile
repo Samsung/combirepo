@@ -29,7 +29,7 @@ pipeline {
     )
     booleanParam(
       name: 'GREEDY',
-      defaultValue: true,
+      defaultValue: false,
       description:
         """
         Greedy mode: get as much packages from marked repository as possible, and get rest from non-marked repository.
@@ -38,7 +38,7 @@ pipeline {
     )
     booleanParam(
       name: 'DISABLE_RPM_PATCHING',
-      defaultValue: true,
+      defaultValue: false,
       description:
         """
         Disable patching of RPM packages in order to make the build faster.
@@ -46,7 +46,7 @@ pipeline {
     )
     booleanParam(
       name: 'DEBUG',
-      defaultValue: false,
+      defaultValue: true,
       description:
         """
         Enable debug mode (temporaries will be saved). USE WITH CAUTION: produces lots of files.
@@ -54,7 +54,7 @@ pipeline {
     )
     booleanParam(
       name: 'VERBOSE',
-      defaultValue: false,
+      defaultValue: true,
       description:
         """
         Enable verbose mode: Produces a lot of output, usually helps to identify the issue root cause
@@ -87,7 +87,7 @@ pipeline {
     )
     string(
       name: 'JOBS_NUMBER',
-      defaultValue: '8',
+      defaultValue: '1',
       description:
         """
         Number of parallel jobs.
