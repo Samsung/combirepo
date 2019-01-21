@@ -132,9 +132,17 @@ class CommandlineParser():
             dest="preferable", help="The name of package that should be "
             "prefered in case of \"have choice\" problem.")
         self._parser.add_argument(
-            "-G", "--package-groups", action="append", type=str,
-            dest="package_groups", help="The id of package group that should "
+            "--groups-single", action="append", type=str,
+            dest="groups_single", help="The id of package groups that should "
             "be marked.")
+        self._parser.add_argument(
+            "--groups-forward", action="append", type=str,
+            dest="groups_forward", help="The id of package groups that should "
+            "be marked with forward dependencies.")
+        self._parser.add_argument(
+            "--groups-backward", action="append", type=str,
+            dest="groups_backward", help="The id of package groups that should "
+            "be marked with backward dependencies.")
         self._parser.add_argument(
             "--packages-file", action="store", type=str,
             dest="packages_file", help="The file containing list of snapshot packages "
@@ -384,7 +392,10 @@ class CommandlineParser():
         @param arguments        The parsed arguments.
         @return                 The list of package groups.
         """
-        package_groups = split_names_list(arguments.package_groups)
+        package_groups = {}
+        package_groups["single"] = split_names_list(arguments.groups_single)
+        package_groups["forward"] = split_names_list(arguments.groups_forward)
+        package_groups["backward"] = split_names_list(arguments.groups_backward)
         return package_groups
 
     def __build_package_names(self, arguments):
