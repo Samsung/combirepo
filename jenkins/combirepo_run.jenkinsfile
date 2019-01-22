@@ -284,9 +284,9 @@ pipeline {
 
           sh """
           if ! ${params.DISABLE_RPM_PATCHING}; then
-              ./setup.py sdist
+              python2 ./setup.py sdist
           fi
-          ./setup.py install --user
+          python2 ./setup.py install --user
 
           wget ${params.KICKSTART_FILE} -O ${ksFile} --user ${OBS_USR} --password ${OBS_PSW}
           if [ ! -f ${ksFile} ]; then
