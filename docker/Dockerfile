@@ -46,6 +46,7 @@ RUN pip install --upgrade pip
 RUN pip install -r /requirements.txt
 RUN chmod +x /combirepo_update.sh
 RUN echo 'update-binfmts --enable' | tee -a /etc/profile /etc/bash.bashrc
+RUN cd /opt/app/combirepo && git submodule init && git submodule update
 RUN /combirepo_update.sh
 
 CMD ["combirepo", "--help"]
