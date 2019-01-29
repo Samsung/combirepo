@@ -12,7 +12,7 @@ def pkgTmp
 pipeline {
   agent {
     docker {
-      image 'alyupa/combirepo:v2'
+      image 'alyupa/combirepo:v3'
       args "--privileged -u root:root"
     }
   }
@@ -186,11 +186,6 @@ pipeline {
   }
 
   stages {
-    stage('Clean workspace') {
-      steps {
-        cleanWs()
-      }
-    }
     stage('Parameters initialization') {
       steps {
         script {
@@ -247,6 +242,8 @@ pipeline {
     stage('Build') {
       steps {
         sh """
+        rm -rf ${micDir} ${cacheDir} ./*
+
         wget ${pkgURL} -O ${pkgTmp} --user ${OBS_USR} --password ${OBS_PSW}
         if [ ! -f ${pkgTmp} ]; then
           echo "Packages file not found!"
@@ -287,6 +284,8 @@ pipeline {
         mkdir -p ${micDir}
         mkdir -p ${cacheDir}
 
+        echo "${BUILD_URL}" > ${micDir}/info.txt
+
         mount binfmt_misc -t binfmt_misc /proc/sys/fs/binfmt_misc
 
         combirepo -A ${params.ARCH} -k ${ksFile} --packages-file ${pkgFile} --user ${OBS_USR} --password ${OBS_PSW} \
@@ -305,22 +304,16 @@ pipeline {
   post {
     always {
         echo 'Test run completed!'
-    }
-    success {
-        echo 'Successfully!'
         archiveArtifacts artifacts: "${ksFile}"
         archiveArtifacts artifacts: "${pkgFile}"
         archiveArtifacts artifacts: "${logFile}"
         archiveArtifacts artifacts: "${micDir}/*"
     }
+    success {
+        echo 'Successfully!'
+    }
     failure {
         echo 'Failed!'
-    }
-    unstable {
-        echo 'Run was marked as unstable!'
-    }
-    changed {
-        echo 'State of the Pipeline has changed!'
     }
   }
 }
