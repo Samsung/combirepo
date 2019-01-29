@@ -15,6 +15,7 @@ RUN echo "deb http://archive.ubuntu.com/ubuntu xenial main universe" >> /etc/apt
     createrepo \
     curl \
     dh-make \
+    git \
     libxml2-dev \
     mic \
     python \
@@ -40,6 +41,7 @@ WORKDIR /opt/app
 COPY ./ /opt/app/combirepo
 COPY ./docker/requirements.txt /
 
+RUN pip install --upgrade pip
 RUN pip install -r /requirements.txt
 RUN echo 'update-binfmts --enable' | tee -a /etc/profile /etc/bash.bashrc
 RUN cd /opt/app/combirepo && python ./setup.py sdist && python ./setup.py install
