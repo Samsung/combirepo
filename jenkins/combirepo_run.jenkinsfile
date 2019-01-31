@@ -4,9 +4,18 @@ def pkgFile
 def micFile
 def micDir
 def cacheDir
+def unified_repo_name
+def unified_asan_repo_name
+def pkgURL
+def pkgTmp
 
 pipeline {
-  agent any
+  agent {
+    docker {
+      image 'alyupa/combirepo:v3'
+      args "--privileged -u root:root"
+    }
+  }
 
   options {
     skipDefaultCheckout true
@@ -177,38 +186,26 @@ pipeline {
   }
 
   stages {
-    stage('Clean and checkout') {
-      steps {
-        cleanWs()
-        checkout scm
-      }
-    }
     stage('Parameters initialization') {
       steps {
         script {
           ksFile = "local.ks"
           logFile = "local.log"
           pkgFile = "local.packages"
-          micFile = "jenkins/mic.conf"
+          micFile = "/etc/mic/mic.conf"
           micDir = params.OUTDIR
           cacheDir = params.CACHEDIR
-        }
-      }
-    }
-    stage('Prepare packages list') {
-      steps {
-        script {
-            pkgURL = params.KICKSTART_FILE.replace('.ks','.packages')
-            pkgTmp = "tmp.packages"
-            sh """
-            wget ${pkgURL} -O ${pkgTmp} --user ${OBS_USR} --password ${OBS_PSW}
-            if [ ! -f ${pkgTmp} ]; then
-              echo "Packages file not found!"
-              exit 1
-            else
-              cat ${pkgTmp} | awk '{print \$1}' | sed -e 's|.${params.ARCH}||g' | sed -e 's|.noarch||g' | sort -n > ${pkgFile}
-            fi
-            """
+          pkgURL = params.KICKSTART_FILE.replace('.ks','.packages')
+          pkgTmp = "tmp.packages"
+          unified_repo_name=""
+          unified_asan_repo_name=""
+          if (params.ARCH == "armv7l") {
+            unified_repo_name="unified-standard"
+            unified_asan_repo_name="unified-standard-asan"
+          } else if (params.ARCH == "i686") {
+            unified_repo_name="unified-emulator"
+            unified_asan_repo_name="unified-emulator-asan"
+          }
         }
       }
     }
@@ -234,35 +231,8 @@ pipeline {
               return 0
             }
           }
-          def checkPkgs = { String param, String name ->
-            if (!param.isEmpty()) {
-              pkgs = param.split(',')
-              for (p in pkgs) {
-                pkg = p.stripIndent()
-                f = readFile(pkgFile)
-                lines = f.readLines()
-                flag = false
-                for (l in lines) {
-                  if (pkg.equals(l.stripIndent())) {
-                    flag = true
-                    break
-                  }
-                }
-                if (!flag) {
-                  println "Warning: " + pkg + " is not found in the packages list!"
-                  println "Warning: " + name + " list is corrupted!"
-                }
-              }
-            }
-            return 0
-          }
           if (checkStr(params.OBS_ACCOUNT_ID, "OBS_ACCOUNT_ID") ||
-              checkStr(params.KICKSTART_FILE, "KICKSTART_FILE") ||
-              checkPkgs(params.FORWARD, "FORWARD") ||
-              checkPkgs(params.BACKWARD, "BACKWARD") ||
-              checkPkgs(params.SINGLE, "SINGLE") ||
-              checkPkgs(params.EXCLUDE, "EXCLUDE") ||
-              checkPkgs(params.PREFERABLE, "PREFERABLE")) {
+              checkStr(params.KICKSTART_FILE, "KICKSTART_FILE")) {
             println "Error: Parameters check failed!"
             sh "exit 1"
           }
@@ -271,55 +241,54 @@ pipeline {
     }
     stage('Build') {
       steps {
-        script {
-          unified_repo_name=""
-          unified_asan_repo_name=""
-          if (params.ARCH == "armv7l") {
-            unified_repo_name="unified-standard"
-            unified_asan_repo_name="unified-standard-asan"
-          } else if (params.ARCH == "i686") {
-            unified_repo_name="unified-emulator"
-            unified_asan_repo_name="unified-emulator-asan"
-          }
+        sh """
+        rm -rf ${micDir} ${cacheDir} ./*
 
-          sh """
-          if ! ${params.DISABLE_RPM_PATCHING}; then
-              python2 ./setup.py sdist
-          fi
-          python2 ./setup.py install --user
+        wget ${pkgURL} -O ${pkgTmp} --user ${OBS_USR} --password ${OBS_PSW}
+        if [ ! -f ${pkgTmp} ]; then
+          echo "Packages file not found!"
+          exit 1
+        else
+          cat ${pkgTmp} | awk '{print \$1}' | sed -e 's|.${params.ARCH}||g' | sed -e 's|.noarch||g' | sort -n > ${pkgFile}
+        fi
 
-          wget ${params.KICKSTART_FILE} -O ${ksFile} --user ${OBS_USR} --password ${OBS_PSW}
-          if [ ! -f ${ksFile} ]; then
-              echo "Kickstart file not found!"
-              exit 1
-          fi
+        wget ${params.KICKSTART_FILE} -O ${ksFile} --user ${OBS_USR} --password ${OBS_PSW}
+        if [ ! -f ${ksFile} ]; then
+            echo "Kickstart file not found!"
+            exit 1
+        fi
 
-          unified_repo=`cat ${ksFile} | grep 'repo --name=${unified_repo_name} --baseurl=' | egrep -o 'https?://[^ ]+'`
-          unified_asan_repo=`cat ${ksFile} | grep 'repo --name=${unified_asan_repo_name} --baseurl=' | egrep -o 'https?://[^ ]+'`
-          base_repo=`cat ${ksFile} | grep 'repo --name=base-standard --baseurl=' | egrep -o 'https?://[^ ]+'`
-          base_asan_repo=`cat ${ksFile} | grep 'repo --name=base-standard-asan --baseurl=' | egrep -o 'https?://[^ ]+'`
+        unified_repo=`cat ${ksFile} | grep 'repo --name=${unified_repo_name} --baseurl=' | egrep -o 'https?://[^ ]+'`
+        unified_asan_repo=`cat ${ksFile} | grep 'repo --name=${unified_asan_repo_name} --baseurl=' | egrep -o 'https?://[^ ]+'`
+        base_repo=`cat ${ksFile} | grep 'repo --name=base-standard --baseurl=' | egrep -o 'https?://[^ ]+'`
+        base_asan_repo=`cat ${ksFile} | grep 'repo --name=base-standard-asan --baseurl=' | egrep -o 'https?://[^ ]+'`
 
-          sed -i "/${unified_asan_repo_name}/d" ${ksFile}
-          sed -i "/base-standard-asan/d" ${ksFile}
+        sed -i "/${unified_asan_repo_name}/d" ${ksFile}
+        sed -i "/base-standard-asan/d" ${ksFile}
+        sed -i "s/%prepackages/%prepackages\\nlibasan/g" ${ksFile}
 
-          if ${params.MIRROR}; then mirror="--mirror"; else mirror=""; fi
-          if ${params.GREEDY}; then greedy="--greedy"; else greedy=""; fi
-          if ${params.DISABLE_RPM_PATCHING}; then rpm_patching="--disable-rpm-patching"; else rpm_patching=""; fi
-          if ${params.DEBUG}; then debug="--debug"; else debug=""; fi
-          if ${params.VERBOSE}; then verbose="--verbose"; else verbose=""; fi
-          if [ ! -z ${params.FORWARD} ]; then forward="-f ${params.FORWARD}"; else forward=""; fi
-          if [ ! -z ${params.BACKWARD} ]; then backward="-b ${params.BACKWARD}"; else backward=""; fi
-          if [ ! -z ${params.SINGLE} ]; then single="-s ${params.SINGLE}"; else single=""; fi
-          if [ ! -z ${params.EXCLUDE} ]; then exclude="-e ${params.EXCLUDE}"; else exclude=""; fi
-          if [ ! -z ${params.PREFERABLE} ]; then preferable="-p ${params.PREFERABLE}"; else preferable=""; fi
-          if [ ! -z ${params.GROUPS_SINGLE} ]; then groups_single="--groups-single ${params.GROUPS_SINGLE}"; else groups_single=""; fi
-          if [ ! -z ${params.GROUPS_FORWARD} ]; then groups_forward="--groups-forward ${params.GROUPS_FORWARD}"; else groups_forward=""; fi
-          if [ ! -z ${params.GROUPS_BACKWARD} ]; then groups_backward="--groups-backward ${params.GROUPS_BACKWARD}"; else groups_backward=""; fi
+        if ${params.MIRROR}; then mirror="--mirror"; else mirror=""; fi
+        if ${params.GREEDY}; then greedy="--greedy"; else greedy=""; fi
+        if ${params.DISABLE_RPM_PATCHING}; then rpm_patching="--disable-rpm-patching"; else rpm_patching=""; fi
+        if ${params.DEBUG}; then debug="--debug"; else debug=""; fi
+        if ${params.VERBOSE}; then verbose="--verbose"; else verbose=""; fi
+        if [ ! -z ${params.FORWARD} ]; then forward="-f ${params.FORWARD}"; else forward=""; fi
+        if [ ! -z ${params.BACKWARD} ]; then backward="-b ${params.BACKWARD}"; else backward=""; fi
+        if [ ! -z ${params.SINGLE} ]; then single="-s ${params.SINGLE}"; else single=""; fi
+        if [ ! -z ${params.EXCLUDE} ]; then exclude="-e ${params.EXCLUDE}"; else exclude=""; fi
+        if [ ! -z ${params.PREFERABLE} ]; then preferable="-p ${params.PREFERABLE}"; else preferable=""; fi
+        if [ ! -z ${params.GROUPS_SINGLE} ]; then groups_single="--groups-single ${params.GROUPS_SINGLE}"; else groups_single=""; fi
+        if [ ! -z ${params.GROUPS_FORWARD} ]; then groups_forward="--groups-forward ${params.GROUPS_FORWARD}"; else groups_forward=""; fi
+        if [ ! -z ${params.GROUPS_BACKWARD} ]; then groups_backward="--groups-backward ${params.GROUPS_BACKWARD}"; else groups_backward=""; fi
 
-          mkdir -p ${micDir}
-          mkdir -p ${cacheDir}
+        mkdir -p ${micDir}
+        mkdir -p ${cacheDir}
 
-          combirepo -A ${params.ARCH} -k ${ksFile} --packages-file ${pkgFile} --user ${OBS_USR} --password ${OBS_PSW} \
+        echo "${BUILD_URL}" > ${micDir}/info.txt
+
+        mount binfmt_misc -t binfmt_misc /proc/sys/fs/binfmt_misc
+
+        combirepo -A ${params.ARCH} -k ${ksFile} --packages-file ${pkgFile} --user ${OBS_USR} --password ${OBS_PSW} \
           -o ${micDir} -l ${logFile} --tmp-dir ${cacheDir} -j ${params.JOBS_NUMBER} \
           \${greedy} \${mirror} \${rpm_patching} \${debug} \${verbose} \
           --regenerate-repodata --preferring-strategy big --skip-version-mismatch --mic-config ${micFile} \
@@ -328,30 +297,23 @@ pipeline {
           \${groups_single} \${groups_forward} \${groups_backward} \
           ${unified_repo_name} \${unified_repo} \${unified_asan_repo} \
           base-standard \${base_repo} \${base_asan_repo}
-          """
-        }
+        """
       }
     }
   }
   post {
     always {
         echo 'Test run completed!'
-    }
-    success {
-        echo 'Successfully!'
         archiveArtifacts artifacts: "${ksFile}"
         archiveArtifacts artifacts: "${pkgFile}"
         archiveArtifacts artifacts: "${logFile}"
         archiveArtifacts artifacts: "${micDir}/*"
     }
+    success {
+        echo 'Successfully!'
+    }
     failure {
         echo 'Failed!'
-    }
-    unstable {
-        echo 'Run was marked as unstable!'
-    }
-    changed {
-        echo 'State of the Pipeline has changed!'
     }
   }
 }
