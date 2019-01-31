@@ -854,13 +854,14 @@ def resolve_groups(repositories, parameters):
     try:
         parser = mic.kickstart.read_kickstart(kickstart_file_path)
         packages = set(mic.kickstart.get_packages(parser))
-        groups_single = groups_single.intersection(parameters.packages_list)
+        if parameters.packages_list is not None:
+            groups_single = groups_single.intersection(parameters.packages_list)
+            groups_forward = groups_forward.intersection(parameters.packages_list)
+            groups_backward = groups_backward.intersection(parameters.packages_list)
         for pkg in groups_single:
             parameters.package_names["single"].add(pkg)
-        groups_forward = groups_forward.intersection(parameters.packages_list)
         for pkg in groups_forward:
             parameters.package_names["forward"].add(pkg)
-        groups_backward = groups_backward.intersection(parameters.packages_list)
         for pkg in groups_backward:
             parameters.package_names["backward"].add(pkg)
     except mic.utils.errors.KsError as err:
