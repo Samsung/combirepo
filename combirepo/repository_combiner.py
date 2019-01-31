@@ -523,6 +523,7 @@ def check_package_names(graphs, package_names):
     missing_packages = {}
     for package in specified_packages:
         if package not in existing_packages.keys():
+            specified_packages.remove(package)
             missing_packages[package] = []
             for candidate in existing_packages.keys():
                 ratio = difflib.SequenceMatcher(
@@ -544,7 +545,6 @@ def check_package_names(graphs, package_names):
                                     "\"{0}\"".format(repository))
             if len(missing_packages[package]) > 0:
                 logging.warning("         Maybe you made a typo?")
-        sys.exit("Error.")
     return specified_packages
 
 
