@@ -12,7 +12,7 @@ def pkgTmp
 pipeline {
   agent {
     docker {
-      image 'alyupa/combirepo:v3'
+      image "${params.DOCKER_IMAGE}"
       args "--privileged -u root:root"
     }
   }
@@ -27,6 +27,14 @@ pipeline {
   }
 
   parameters {
+    string(
+      name: 'DOCKER_IMAGE',
+      defaultValue: 'alyupa/combirepo',
+      description:
+        """
+        Docker image to pull.
+        """
+    )
     booleanParam(
       name: 'MIRROR',
       defaultValue: true,
