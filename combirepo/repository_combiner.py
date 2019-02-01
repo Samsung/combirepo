@@ -523,6 +523,7 @@ def check_package_names(graphs, package_names):
     missing_packages = {}
     for package in specified_packages:
         if package not in existing_packages.keys():
+            specified_packages.remove(package)
             missing_packages[package] = []
             for candidate in existing_packages.keys():
                 ratio = difflib.SequenceMatcher(
@@ -544,7 +545,6 @@ def check_package_names(graphs, package_names):
                                     "\"{0}\"".format(repository))
             if len(missing_packages[package]) > 0:
                 logging.warning("         Maybe you made a typo?")
-        sys.exit("Error.")
     return specified_packages
 
 
@@ -854,13 +854,14 @@ def resolve_groups(repositories, parameters):
     try:
         parser = mic.kickstart.read_kickstart(kickstart_file_path)
         packages = set(mic.kickstart.get_packages(parser))
-        groups_single = groups_single.intersection(parameters.packages_list)
+        if parameters.packages_list is not None:
+            groups_single = groups_single.intersection(parameters.packages_list)
+            groups_forward = groups_forward.intersection(parameters.packages_list)
+            groups_backward = groups_backward.intersection(parameters.packages_list)
         for pkg in groups_single:
             parameters.package_names["single"].add(pkg)
-        groups_forward = groups_forward.intersection(parameters.packages_list)
         for pkg in groups_forward:
             parameters.package_names["forward"].add(pkg)
-        groups_backward = groups_backward.intersection(parameters.packages_list)
         for pkg in groups_backward:
             parameters.package_names["backward"].add(pkg)
     except mic.utils.errors.KsError as err:

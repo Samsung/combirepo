@@ -195,6 +195,9 @@ def inspect_directory(url, target, check_url, packages_list = None):
                             links_resolved.append(link)
                             logging.debug(" * {0}\n".format(link))
                             names.append(name)
+                else:
+                    links_resolved.append(link)
+                    names.append(name)
             else:
                 links_resolved.append(link)
                 logging.debug(" * {0}\n".format(link))

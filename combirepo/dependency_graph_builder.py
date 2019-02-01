@@ -30,6 +30,7 @@ import igraph
 import temporaries
 import check
 import hidden_subprocess
+import scandir
 
 
 class DependencyGraph(igraph.Graph):
@@ -545,7 +546,7 @@ class DependencyGraphBuilder():
             return location
 
         location = None
-        for root, dirs, files in os.walk(self.repository_path):
+        for root, dirs, files in scandir.walk(self.repository_path):
             for existing_file_name in files:
                 if package_name in existing_file_name:
                     location = os.path.join(self.repository_path,
