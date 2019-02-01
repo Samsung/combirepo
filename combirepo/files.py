@@ -25,6 +25,7 @@ import logging
 import re
 import check
 import hidden_subprocess
+import scandir
 
 
 def find_fast(directory, expression):
@@ -40,7 +41,7 @@ def find_fast(directory, expression):
 
     matcher = re.compile(expression)
     files_found = []
-    for root, dirs, files in os.walk(directory):
+    for root, dirs, files in scandir.walk(directory):
         for file_name in files:
             if matcher.match(file_name):
                 path = os.path.join(root, file_name)
