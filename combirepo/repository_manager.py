@@ -24,6 +24,7 @@ import tempfile
 import logging
 import re
 import configparser
+import scandir
 from urllib2 import urlopen
 # Combirepo modules:
 import files
@@ -158,28 +159,24 @@ class RepositoryManager():
         raise Exception("Impossible happened.")
 
     def remove_duplicates(self, repository_path):
-        rpm_list = []
-        for root, dirs, files in os.walk(repository_path):
+        rpms = dict()
+        for root, dirs, files in scandir.walk(repository_path):
             for file in files:
                 if file.endswith(".rpm"):
-                    rpm_list.append(file)
-        for pkg1 in rpm_list:
-            for pkg2 in rpm_list:
-                if pkg1 != pkg2:
-                    split1 = pkg1.rsplit('.', 3)
-                    split2 = pkg2.rsplit('.', 3)
-                    if split1[0] == split2[0]:
-                        logging.debug("Select between {0} and {1}".format(pkg1, pkg2))
-                        if split1[1] > split2[1]:
-                            rpm_list.remove(pkg2)
-                            rpm_path = os.path.join(repository_path, split2[2], pkg2)
-                            if os.path.exists(rpm_path):
-                                logging.debug("Removing {0}".format(pkg2))
-                                os.remove(rpm_path)
+                    split = file.rsplit('.', 3)
+                    path = os.path.join(root, file)
+                    if split[0] in rpms:
+                        path0 = rpms[split[0]]
+                        logging.debug("Select between {0} and {1}".format(path, path0))
+                        split0 = path0.rsplit('.', 3)
+                        rm_path = ''
+                        if split[1] > split0[1]:
+                            rpms[split[0]] = path
+                            rm_path = os.path.join(repository_path, path0)
                         else:
-                            rpm_list.remove(pkg1)
-                            rpm_path = os.path.join(repository_path, split1[2], pkg1)
-                            if os.path.exists(rpm_path):
-                                logging.debug("Removing {0}".format(pkg1))
-                                os.remove(rpm_path)
-                            break
+                            rm_path = os.path.join(repository_path, path)
+                        if os.path.exists(rm_path):
+                            logging.debug("Removing {0}".format(rm_path))
+                            os.remove(rm_path)
+                    else:
+                        rpms[split[0]] = path
