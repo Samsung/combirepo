@@ -280,6 +280,7 @@ pipeline {
         if ${params.DISABLE_RPM_PATCHING}; then rpm_patching="--disable-rpm-patching"; else rpm_patching=""; fi
         if ${params.DEBUG}; then debug="--debug"; else debug=""; fi
         if ${params.VERBOSE}; then verbose="--verbose"; else verbose=""; fi
+        if ${params.FILTER_PKGS}; then filter="--filter-packages"; else filter=""; fi
         if [ ! -z ${params.FORWARD} ]; then forward="-f ${params.FORWARD}"; else forward=""; fi
         if [ ! -z ${params.BACKWARD} ]; then backward="-b ${params.BACKWARD}"; else backward=""; fi
         if [ ! -z ${params.SINGLE} ]; then single="-s ${params.SINGLE}"; else single=""; fi
@@ -298,7 +299,7 @@ pipeline {
 
         combirepo -A ${params.ARCH} -k ${ksFile} --packages-file ${pkgFile} --user ${OBS_USR} --password ${OBS_PSW} \
           -o ${micDir} -l ${logFile} --tmp-dir ${cacheDir} -j ${params.JOBS_NUMBER} \
-          \${greedy} \${mirror} \${rpm_patching} \${debug} \${verbose} \
+          \${greedy} \${mirror} \${rpm_patching} \${debug} \${verbose} \${filter} \
           --regenerate-repodata --preferring-strategy big --skip-version-mismatch --mic-config ${micFile} \
           -S asan-runtime-env \
           \${forward} \${backward} \${single} \${exclude} \${preferable} \

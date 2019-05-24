@@ -147,6 +147,10 @@ class CommandlineParser():
             "--packages-file", action="store", type=str,
             dest="packages_file", help="The file containing list of snapshot packages "
             "that should be downloaded from repositories.")
+        self._parser.add_argument(
+            "--filter-packages", action="store_true", default=False,
+            dest="filter_pkgs", help="If enabled, packages not listed in original "
+            "kickstart file won't be added into firmware.")
 
     def __register_program_run_options(self):
         """

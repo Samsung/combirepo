@@ -238,6 +238,11 @@ class ConfigParser():
                                                   "preferring_strategy")
             parameters.preferring_strategy = preferring_strategy
 
+        if self.parser.has_option(profile_name, "filter_pkgs"):
+            preferring_strategy = self.parser.get(profile_name,
+                                                  "filter_pkgs")
+            parameters.filter_pkgs = filter_pkgs
+
         package_names = {}
         for key in valid_package_keys:
             names = self.__get_list(parameters.profile_name,

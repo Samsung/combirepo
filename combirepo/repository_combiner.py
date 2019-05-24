@@ -859,10 +859,22 @@ def resolve_groups(repositories, parameters):
             groups_forward = groups_forward.intersection(parameters.packages_list)
             groups_backward = groups_backward.intersection(parameters.packages_list)
         for pkg in groups_single:
+            if parameters.filter_pkgs and not pkg in packages:
+                logging.debug("Package {0} was not in "
+                              "original .ks and is filtered out".format(pkg))
+                continue
             parameters.package_names["single"].add(pkg)
         for pkg in groups_forward:
+            if parameters.filter_pkgs and not pkg in packages:
+                logging.debug("Package {0} was not in "
+                              "original .ks and is filtered out".format(pkg))
+                continue
             parameters.package_names["forward"].add(pkg)
         for pkg in groups_backward:
+            if parameters.filter_pkgs and not pkg in packages:
+                logging.debug("Package {0} was not in "
+                              "original .ks and is filtered out".format(pkg))
+                continue
             parameters.package_names["backward"].add(pkg)
     except mic.utils.errors.KsError as err:
         logging.error("Failed to read kickstart file:")

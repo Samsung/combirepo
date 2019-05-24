@@ -11,7 +11,7 @@ RUN apt-get install -y --force-yes --fix-missing \
 
 RUN sed -e 's/arm64/aarch64/;/qemu_arm_string.*aarch64/s/":aarch64:.*"/":aarch64:M::\\\\x7fELF\\\\x02\\\\x01\\\\x01\\\\x00\\\\x00\\\\x00\\\\x00\\\\x00\\\\x00\\\\x00\\\\x00\\\\x00\\\\x02\\\\x00\\\\xb7:\\\\xff\\\\xff\\\\xff\\\\xff\\\\xff\\\\xff\\\\xff\\\\x00\\\\xff\\\\xff\\\\xff\\\\xff\\\\xff\\\\xff\\\\xff\\\\xff\\\\xfe\\\\xff\\\\xff:%s:\\n"/' -i /usr/share/pyshared/mic/utils/misc.py
 
-RUN /usr/bin/pip install stdeb
+RUN /usr/bin/pip install stdeb scandir
 RUN mkdir /usr/lib/python2.7/site-packages/
 RUN echo 'update-binfmts --enable' | tee -a /etc/profile /etc/bash.bashrc
 RUN echo 'export PYTHONPATH=$PYTHONPATH:/usr/lib/python2.7/site-packages/' | tee -a /etc/profile /etc/bash.bashrc
